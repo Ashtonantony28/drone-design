@@ -75,7 +75,9 @@ PRES_GROWTH = 1.25         # ... multiplied each iteration
 PRES_MAX = 3000
 HIST_FRACTION = 0.25        # a cell that stays contested gets this share of the price added for good
 MAX_ITERATIONS = 130
-RIPUP_ROUNDS = 6
+RIPUP_ROUNDS = 8
+RENEG_ITERATIONS = 40
+RENEG_SCALE = (1, 0.3, 3, 0.1)   # a round that closes nothing is tried again from another starting price
 RENEG_PRES = 150            # starting price when one open net is let through a legal board
 PATIENCE = 30               # stop when the best state is this many iterations old
 LAYERS = ("F", "I", "B")    # I = In2.Cu (L3); L2 stays an unbroken ground plane
@@ -281,7 +283,10 @@ class Router:
                 dcore = self.m.dist_rect(win, core)
                 mask = dcore <= rad - 0.05 + 1e-9
             else:
-                mask = self.m.dist_rect(win, inner) < 1e-9
+                # rounded-rectangle pads: a track must end on copper, not in a corner of the box
+                rr = min(0.25, 0.25 * min(box[2] - box[0], box[3] - box[1]))
+                core = (box[0] + rr, box[1] + rr, box[2] - rr, box[3] - rr)
+                mask = self.m.dist_rect(win, core) <= rr - 0.05 + 1e-9
             if not mask.any():
                 d = np.hypot(self.m.X[win] - p["at"][0], self.m.Y[win] - p["at"][1])
                 mask = d <= d.min() + 1e-9
@@ -754,9 +759,16 @@ class Negotiator:
         r = self.routes[net]
         if sign > 0 and not r["stamps"]:
             fx = self.fx
+            # a power-class or wide net is searched on the Q / W maps, which assume a track of
+            # 0.25 / 0.45 mm; its own halo is stamped for that width too, so that both sides
+            # of a near miss see it (a one-sided conflict never moves the other net)
+            special = net in POWER_CLASS or net in WIDE_NETS
             for t in (t for c in r["conns"] for t in c["tracks"]):
                 L = t["layer"][0]
-                for k, win, mask in fx.halo(L, "seg", (t["start"], t["end"], t["width"]), net):
+                w = t["width"]
+                if special:
+                    w = NARROW_POWER if w <= NARROW_POWER else max(w, WIDE, VIA_D)
+                for k, win, mask in fx.halo(L, "seg", (t["start"], t["end"], w), net):
                     r["stamps"].append((self.cnt[k][L], win, mask))
             for v in (v for c in r["conns"] for v in c["vias"]):
                 p = v["at"]
@@ -877,7 +889,9 @@ class Negotiator:
                 used |= lab == piece
         passable = list(st["passable"])
         li_i = LAYERS.index("I")
-        passable[li_i] = passable[li_i] | used
+        # on L3 the net may run anywhere inside its zone (a track through a neck the fill
+        # leaves open, or - at a price, while negotiating - across a signal that then moves)
+        passable[li_i] = passable[li_i] | used | (edge & ((fx.m.T["I"] == 0) | (fx.m.T["I"] == nid)))
         comps = []
         for cids, pieces in groups.values():
             cells = set()
@@ -896,21 +910,27 @@ class Negotiator:
         print("plane %s: %d left open" % (net, left), flush=True)
         return left
 
-    def renegotiate(self, order, seed, iterations=30):
-        """Route one net at a price through whatever is in its way and let the
-        nets it disturbs find other paths.  True if nothing overlaps at the end."""
-        pres = RENEG_PRES
+    def renegotiate(self, order, seed, iterations=RENEG_ITERATIONS, pres=RENEG_PRES):
+        """Let the open connections of one net through at a price; every net keeps
+        the connections that touch nobody and looks for other paths for the rest.
+        True if nothing overlaps at the end."""
         todo = [seed]
         for _ in range(iterations):
             for n in todo:
+                r = self.routes[n]
+                per = self.conflicts(n, per_conn=True) if r["conns"] else []
+                keep = [c for c, bad in zip(r["conns"], per) if not bad]
                 self.stamp(n, -1)
-                self.route(n, pres)
+                self.route(n, pres, keep=keep)
             conf = {n: self.conflicts(n) for n in order if n in self.routes}
             step = max(2, int(pres * HIST_FRACTION))
             for cells in conf.values():
                 for L, y, x in cells:
                     self.hist[L][y, x] += step
             todo = [n for n in order if conf.get(n)]
+            if os.environ.get("AUTOROUTE_DEBUG"):
+                print("    %s: pres %d, open %d, in conflict: %s" % (seed, pres, self.routes[seed]["open"],
+                      ", ".join("%s(%d @%s %.1f,%.1f)" % (n, len(conf[n]), conf[n][0][0], coord(conf[n][0][2]), coord(conf[n][0][1])) for n in todo)), flush=True)
             if not todo:
                 return True
             pres = min(int(pres * PRES_GROWTH) + 1, PRES_MAX)
@@ -1008,7 +1028,7 @@ class Negotiator:
                 if not self.routes[n]["open"]:
                     continue
                 snap, before = self.snapshot(), total_open()
-                ok = self.renegotiate(order, n)
+                ok = self.renegotiate(order, n, pres=max(5, int(RENEG_PRES * RENEG_SCALE[round_no % len(RENEG_SCALE)])))
                 if ok:
                     repair_planes()
                 if ok and total_open() < before:
@@ -1019,7 +1039,7 @@ class Negotiator:
                     if ok:
                         repair_planes()
             print("rip-up round %d: %d connections open, %.0f s" % (round_no + 1, total_open(), time.time() - t0), flush=True)
-            if not improved or total_open() == 0:
+            if total_open() == 0 or (not improved and round_no >= len(RENEG_SCALE) - 1):
                 break
         left = {n: self.routes[n]["open"] for n in order if self.routes[n]["open"]}
         tracks = [t for n in order for c in self.routes[n]["conns"] for t in c["tracks"]]

@@ -426,4 +426,15 @@ if __name__ == "__main__":
     print("island edge to DShot copper %.2f mm (informative)" % min(lay_.dist(t, isl) for t in dshot))
     for net, (length, n) in dshot_lengths(lay_).items():
         print(net, "%.2f mm in %d segments" % (length, n))
+    # informative: DESIGN.md 5.6/5.8 ask for QSPI matched to +-2 mm and a short USB pair;
+    # the maze router does not tune lengths, so the numbers are reported, not asserted
+    def net_len(net):
+        return sum(t["len"] for t in lay_.tracks if t["net"] == net)
+    q = {n: net_len(n) for n in sorted({t["net"] for t in lay_.tracks}) if n.startswith("QSPI_")}
+    if q:
+        print("QSPI lengths (informative):", ", ".join("%s %.1f" % (n[5:], v) for n, v in q.items()),
+              "-> spread %.1f mm" % (max(q.values()) - min(q.values())))
+    print("USB lengths (informative): D+ %.1f mm, D- %.1f mm" % (net_len("USB_P"), net_len("USB_N")))
+    print("track length on In2.Cu (L3): %.1f mm in %d segments" % (
+        sum(t["len"] for t in lay_.tracks if t["layer"] == "In2.Cu"), sum(1 for t in lay_.tracks if t["layer"] == "In2.Cu")))
     raise SystemExit(pytest.main([os.path.abspath(__file__), "-q"]))

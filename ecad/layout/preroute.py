@@ -56,6 +56,9 @@ L3_LINKS = [("VBAT", "PWR.C_VBAT3.C", "PWR.C_VBAT1.C", 0.5)]   # net, pad, pad, 
 MANUAL = [
     # bootstrap: buck pin 4 down past the VCC pin, under the capacitor's SW pad, up into its BOOT pad
     ("PWR.BUCK_BOOT", "B", 0.15, [(9.6, 5.0), (9.6, 5.9), (9.95, 6.25), (11.3, 6.25), (11.54, 5.85)]),
+    # crystal: straight from the MCU pins, between the decoupling capacitors, before any via goes there
+    ("MCU.HSE_IN", "F", 0.15, [(2.5, -6.6), (2.45, -7.1), (2.45, -9.7)]),
+    ("MCU.HSE_OUT", "F", 0.15, [(2.0, -6.6), (2.0, -7.2), (1.65, -7.6), (1.65, -11.4), (1.25, -11.9)]),
     # switch node to the bootstrap capacitor: out of pin 3, down between pin 4 and the input capacitor
     ("PWR.BUCK_SW", "B", 0.2, [(9.7, 4.475), (10.0, 4.475), (10.1, 4.6), (10.1, 5.0), (10.45, 5.45)]),
 ]
@@ -66,6 +69,7 @@ STITCH_INSET = 0.9
 # The QFN sits between the board edge, a mounting hole and the buck: its pins
 # are fanned out by the maze router, which can rip up and retry.
 NO_FANOUT = {"FPGA.U10.X"}
+FANOUT_MAX = 1.8       # longest pad-to-via track of the fan-out; a longer one fences its neighbours in
 VIA_IN_PAD = {("FPGA.U10.X", "49"): [(-1.5, -1.5), (1.5, -1.5), (-1.5, 1.5), (1.5, 1.5)]}
 
 
@@ -418,13 +422,14 @@ class Router:
     # ---- 3. plane fan-out ---------------------------------------------------
     def fanout(self, skip):
         todo = [p for p in self.pads if p["net"] in PLANES and not p["through"] and p["layers"]
-                and (p["path"], p["number"]) not in skip
-                and not (p["path"] in NO_FANOUT and (p["path"], p["number"]) not in VIA_IN_PAD)]
+                and (p["path"], p["number"]) not in skip]
         # crowded pads first: they have the fewest places for a via
         def crowd(p):
             return -sum(1 for q in self.pads if q is not p and point_rect(p["at"], q["box"]) < 1.2)
-        todo.sort(key=lambda p: (crowd(p), p["ref"], p["number"], p["at"]))
+        # the packages that only fan out along their pins go first: they have one place each
+        todo.sort(key=lambda p: (p["path"] not in NO_FANOUT, crowd(p), p["ref"], p["number"], p["at"]))
         offsets = sorted(((dx * 0.1, dy * 0.1) for dx in range(-24, 25) for dy in range(-24, 25)), key=lambda o: (round(math.hypot(*o), 3), o))
+        orphans = []
         for p in todo:
             key = (p["path"], p["number"])
             if key in VIA_IN_PAD:
@@ -455,6 +460,22 @@ class Router:
                     break
             if done:
                 continue
+            if p["path"] in NO_FANOUT:
+                # fine-pitch package in a tight spot: only straight out along the pin, so that
+                # no neighbour is walled in; whatever finds no place is left to the maze router
+                cx, cy = self.fp[p["path"]]["at"]
+                w, h = bx[2] - bx[0], bx[3] - bx[1]
+                ux, uy = ((1 if p["at"][0] > cx else -1), 0) if w > h else (0, (1 if p["at"][1] > cy else -1))
+                tip = (bx[2] if ux > 0 else bx[0] if ux < 0 else p["at"][0], bx[3] if uy > 0 else bx[1] if uy < 0 else p["at"][1])
+                for i in range(6, 28):
+                    c = (tip[0] + ux * 0.05 * i, tip[1] + uy * 0.05 * i)
+                    if self.plane_ok(c, p["net"]) and self.via_ok(c, p["net"]) and self.track_ok(p["at"], c, 0.2, layer, p["net"], lanes=False):
+                        self.add_track(p["at"], c, 0.2, layer, p["net"])
+                        self.add_via(c, p["net"])
+                        break
+                else:
+                    orphans.append(p)
+                continue
             for dx, dy in offsets:
                 # walk outwards from the pad outline
                 c = (min(max(p["at"][0] + dx * 3, bx[0]), bx[2]) + dx, min(max(p["at"][1] + dy * 3, bx[1]), bx[3]) + dy)
@@ -463,13 +484,41 @@ class Router:
                 if not self.plane_ok(c, p["net"]) or not self.via_ok(c, p["net"]):
                     continue
                 start = (min(max(c[0], bx[0] + inset), bx[2] - inset), min(max(c[1], bx[1] + inset), bx[3] - inset))
-                if not self.track_ok(start, c, width, layer, p["net"]):
+                if math.dist(start, c) > FANOUT_MAX or not self.track_ok(start, c, width, layer, p["net"]):
                     continue
                 self.add_track(start, c, width, layer, p["net"])
                 self.add_via(c, p["net"])
                 done = True
                 break
             if not done:
+                orphans.append(p)
+
+        # no place for a via: a straight track to the nearest via or pad of the net that has one
+        for p in orphans:
+            layer, bx = p["layers"][0], p["box"]
+            small = min(bx[2] - bx[0], bx[3] - bx[1])
+            cands = [(point_rect(v["at"], bx), tuple(v["at"])) for v in self.vias if v["net"] == p["net"]]
+            cands += [(point_rect(q["at"], bx), tuple(q["at"])) for q in self.pads
+                      if q is not p and q["net"] == p["net"] and q not in orphans and layer in q["layers"] and not q["through"]]
+            for d, target in sorted(cands):
+                if d > 2.0:
+                    cands = None
+                    break
+                done = False
+                for w in (0.25, 0.2, 0.15):
+                    if w > small + 1e-9:
+                        continue
+                    h = w / 2
+                    start = (min(max(target[0], bx[0] + h), bx[2] - h), min(max(target[1], bx[1] + h), bx[3] - h))
+                    if self.track_ok(start, target, w, layer, p["net"], lanes=False):
+                        self.add_track(start, target, w, layer, p["net"])
+                        done = True
+                        break
+                if done:
+                    break
+            else:
+                cands = None
+            if cands is None:
                 self.log.append("no plane via for %s.%s (%s) - left to the autorouter" % (p["ref"], p["number"], p["net"]))
 
     # ---- 4. stitching ---------------------------------------------------------
