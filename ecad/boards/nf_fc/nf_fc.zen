@@ -258,7 +258,7 @@ Board(
     name="nf_fc",
     layers=4,
     layout_path="layout/nf_fc",
-    via_dimensions=[JLC_VIA],
+    via_dimensions=[JLC_VIA, ViaDimension(diameter=0.6, drill=0.3)],
     track_widths=[JLC_MIN_TRACK, 0.15, 0.25, 0.5],
     config=BoardConfig(
         design_rules=DesignRules(
@@ -283,6 +283,15 @@ Board(
                     via_drill=JLC_VIA.drill,
                     diff_pair_width=0.1867,
                     diff_pair_gap=0.127,
+                ),
+                # Rails that are routed as tracks, not poured (assigned in layout/place.py)
+                NetClass(
+                    name="Power",
+                    clearance=0.15,
+                    track_width=0.4,
+                    via_diameter=0.6,
+                    via_drill=0.3,
+                    color="#C20000FF",
                 ),
                 # stdlib 4-layer GCPW figure for 90 ohm on L1 over the 0.21 mm prepreg
                 NetClass(
