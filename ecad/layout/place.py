@@ -64,8 +64,8 @@ PARTS = {
     "BARO.U4.X": (15.0, -8.7, 180, "F"),
     "BARO.C_U4_VDD.C": (15.9, -10.6, 0, "F"),
     "BARO.C_U4_VDDIO.C": (13.9, -10.6, 0, "F"),
-    "BARO.R_SCL.R": (11.5, -6.6, 90, "F"),
-    "BARO.R_SDA.R": (12.6, -7.6, 90, "F"),
+    "BARO.R_SCL.R": (12.6, -7.6, 90, "F"),   # SCL is the inner line from the MCU: its pull-up sits next to U4 pin 4,
+    "BARO.R_SDA.R": (11.5, -6.6, 90, "F"),   # SDA runs outside it and enters pin 3 between the pad rows (no crossing)
     # --- BOOT0 ---
     "MCU.SW1.X": (14.95, 0.5, 90, "F"),
     "MCU.R_BOOT0.R": (11.9, -1.5, 90, "F"),
@@ -188,7 +188,7 @@ PARTS = {
     "TP15.TP": (-10.6, -15.9, 0, "B"),  # GND near TP4
     "PWR.TP8.TP": (5.15, -2.08, 0, "B"),  # buck SW
     "TP9.TP": (3.9, 7.1, 0, "B"),  # VBAT_SENSE
-    "TP10.TP": (3.45, 9.7, 0, "B"),  # MOTOR0 after series R
+    "TP10.TP": (3.45, 9.7, 0, "B"),  # MOTOR0 after series R: a branch off ESC_M1 from the east, ESC_M2 passes below it
     "TP11.TP": (-9.0, 0.3, 0, "B"),  # IMUA_INT1
     "TP12.TP": (0.1, 5.3, 0, "B"),  # IMUB_INT1
     "TP13.TP": (-6.0, -16.5, 0, "B"),  # NRST

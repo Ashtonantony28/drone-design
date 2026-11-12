@@ -83,7 +83,10 @@ PATIENCE = 30               # stop when the best state is this many iterations o
 LAYERS = ("F", "I", "B")    # I = In2.Cu (L3); L2 stays an unbroken ground plane
 INNER_COST = 12             # per step on L3: outer layers first, L3 "where needed" (DESIGN.md 1)
 # nets that stay on the outer layers: fast edges, the buck, and the planes themselves
-OUTER_ONLY = ("USB_", "QSPI_", "IMUA_", "IMUB_", "IMU.", "MOTOR", "ESC_M", "CONN.ESC_M", "MCU.HSE", "PWR.BUCK", "VBAT",
+# Nets that stay on the outer layers.  USB (full speed) and QSPI were on this list; with them the
+# board closed to one open net in every run, each time one of those two buses or a net beside them:
+# both cross under the whole MCU, and the outer layers there are full.  They may use L3 now.
+OUTER_ONLY = ("IMUA_", "IMUB_", "IMU.", "MOTOR", "ESC_M", "CONN.ESC_M", "MCU.HSE", "PWR.BUCK", "VBAT",
               "GND", "3V3_D", "3V3_IMU", "VDDA")
 
 
@@ -946,6 +949,12 @@ class Negotiator:
             return (max(xs) - min(xs)) + (max(ys) - min(ys))
 
         order = [n for n in FIRST if n in self.nets] + sorted((n for n in self.nets if n not in FIRST), key=lambda n: (n in PLANES, size(n), n))
+        seed = os.environ.get("AUTOROUTE_SEED")   # another net order = another solution, when one run leaves a net open
+        if seed:
+            import random
+            tail = order[len([n for n in FIRST if n in self.nets]):]
+            random.Random(int(seed)).shuffle(tail)
+            order = order[:len(order) - len(tail)] + sorted(tail, key=lambda n: n in PLANES)
         t0 = time.time()
         resume = os.environ.get("AUTOROUTE_RESUME")   # debugging aid: skip the negotiation, start from a saved state
         if resume:

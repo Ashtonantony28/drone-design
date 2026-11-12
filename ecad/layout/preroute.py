@@ -69,6 +69,9 @@ STITCH_INSET = 0.9
 # The QFN sits between the board edge, a mounting hole and the buck: its pins
 # are fanned out by the maze router, which can rip up and retry.
 NO_FANOUT = {"FPGA.U10.X"}
+# signal / rail pins of those packages that get their escape via scripted as well: the 1V2 pin of
+# the FPGA sits under the MCU's pin row, between CDONE and the flash chip select
+ESCAPE_VIAS = {("FPGA.U10.X", "5")}
 FANOUT_MAX = 1.8       # longest pad-to-via track of the fan-out; a longer one fences its neighbours in
 VIA_IN_PAD = {("FPGA.U10.X", "49"): [(-1.5, -1.5), (1.5, -1.5), (-1.5, 1.5), (1.5, 1.5)]}
 
@@ -421,8 +424,8 @@ class Router:
 
     # ---- 3. plane fan-out ---------------------------------------------------
     def fanout(self, skip):
-        todo = [p for p in self.pads if p["net"] in PLANES and not p["through"] and p["layers"]
-                and (p["path"], p["number"]) not in skip]
+        todo = [p for p in self.pads if (p["net"] in PLANES or (p["path"], p["number"]) in ESCAPE_VIAS)
+                and not p["through"] and p["layers"] and (p["path"], p["number"]) not in skip]
         # crowded pads first: they have the fewest places for a via
         def crowd(p):
             return -sum(1 for q in self.pads if q is not p and point_rect(p["at"], q["box"]) < 1.2)
@@ -469,7 +472,8 @@ class Router:
                 tip = (bx[2] if ux > 0 else bx[0] if ux < 0 else p["at"][0], bx[3] if uy > 0 else bx[1] if uy < 0 else p["at"][1])
                 for i in range(6, 28):
                     c = (tip[0] + ux * 0.05 * i, tip[1] + uy * 0.05 * i)
-                    if self.plane_ok(c, p["net"]) and self.via_ok(c, p["net"]) and self.track_ok(p["at"], c, 0.2, layer, p["net"], lanes=False):
+                    if (p["net"] not in PLANES or self.plane_ok(c, p["net"])) and self.via_ok(c, p["net"]) \
+                            and self.track_ok(p["at"], c, 0.2, layer, p["net"], lanes=False):
                         self.add_track(p["at"], c, 0.2, layer, p["net"])
                         self.add_via(c, p["net"])
                         break
@@ -481,7 +485,7 @@ class Router:
                 c = (min(max(p["at"][0] + dx * 3, bx[0]), bx[2]) + dx, min(max(p["at"][1] + dy * 3, bx[1]), bx[3]) + dy)
                 if point_rect(c, bx) < VIA_D / 2 + PAD_GAP:
                     continue
-                if not self.plane_ok(c, p["net"]) or not self.via_ok(c, p["net"]):
+                if (p["net"] in PLANES and not self.plane_ok(c, p["net"])) or not self.via_ok(c, p["net"]):
                     continue
                 start = (min(max(c[0], bx[0] + inset), bx[2] - inset), min(max(c[1], bx[1] + inset), bx[3] - inset))
                 if math.dist(start, c) > FANOUT_MAX or not self.track_ok(start, c, width, layer, p["net"]):
@@ -493,33 +497,41 @@ class Router:
             if not done:
                 orphans.append(p)
 
-        # no place for a via: a straight track to the nearest via or pad of the net that has one
-        for p in orphans:
-            layer, bx = p["layers"][0], p["box"]
-            small = min(bx[2] - bx[0], bx[3] - bx[1])
-            cands = [(point_rect(v["at"], bx), tuple(v["at"])) for v in self.vias if v["net"] == p["net"]]
-            cands += [(point_rect(q["at"], bx), tuple(q["at"])) for q in self.pads
-                      if q is not p and q["net"] == p["net"] and q not in orphans and layer in q["layers"] and not q["through"]]
-            for d, target in sorted(cands):
-                if d > 2.0:
-                    cands = None
-                    break
+        # No place for a via: a straight track to the nearest via of the net, or to a pad that
+        # reached one.  The MCU supply pins whose capacitor found no via are in the same position.
+        for pin, cap in MCU_DECAPS.items():
+            mp = self.pad(MCU, pin)
+            if mp["net"] in PLANES and self.pad(cap, net=mp["net"]) in orphans:
+                orphans.append(mp)
+        progress = True
+        while progress and orphans:
+            progress = False
+            for p in list(orphans):
+                layer, bx = p["layers"][0], p["box"]
+                small = min(bx[2] - bx[0], bx[3] - bx[1])
+                cands = [(point_rect(v["at"], bx), tuple(v["at"])) for v in self.vias if v["net"] == p["net"]]
+                cands += [(point_rect(q["at"], bx), tuple(q["at"])) for q in todo
+                          if q is not p and q["net"] == p["net"] and q not in orphans and layer in q["layers"]]
                 done = False
-                for w in (0.25, 0.2, 0.15):
-                    if w > small + 1e-9:
-                        continue
-                    h = w / 2
-                    start = (min(max(target[0], bx[0] + h), bx[2] - h), min(max(target[1], bx[1] + h), bx[3] - h))
-                    if self.track_ok(start, target, w, layer, p["net"], lanes=False):
-                        self.add_track(start, target, w, layer, p["net"])
-                        done = True
+                for d, target in sorted(cands):
+                    if d > 2.0:
+                        break
+                    for w in (0.25, 0.2, 0.15):
+                        if w > small + 1e-9:
+                            continue
+                        h = w / 2
+                        start = (min(max(target[0], bx[0] + h), bx[2] - h), min(max(target[1], bx[1] + h), bx[3] - h))
+                        if self.track_ok(start, target, w, layer, p["net"], lanes=False):
+                            self.add_track(start, target, w, layer, p["net"])
+                            done = True
+                            break
+                    if done:
                         break
                 if done:
-                    break
-            else:
-                cands = None
-            if cands is None:
-                self.log.append("no plane via for %s.%s (%s) - left to the autorouter" % (p["ref"], p["number"], p["net"]))
+                    orphans.remove(p)
+                    progress = True
+        for p in orphans:
+            self.log.append("no plane via for %s.%s (%s) - left to the autorouter" % (p["ref"], p["number"], p["net"]))
 
     # ---- 4. stitching ---------------------------------------------------------
     def stitch(self):
