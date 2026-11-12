@@ -14,6 +14,13 @@ import pcbnew
 mm = pcbnew.ToMM
 
 
+def pad_shape(p):
+    try:
+        return p.GetShape(pcbnew.F_Cu if p.IsOnLayer(pcbnew.F_Cu) else pcbnew.B_Cu)
+    except TypeError:
+        return p.GetShape()
+
+
 def main(board_path, out_path):
     b = pcbnew.LoadBoard(board_path)
     bb = b.GetBoardEdgesBoundingBox()
@@ -39,6 +46,7 @@ def main(board_path, out_path):
                 "number": p.GetNumber(), "net": p.GetNetname(), "at": xy(p.GetPosition()), "box": box(p.GetBoundingBox()),
                 "drill": mm(p.GetDrillSize().x), "plated": p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH,
                 "npth": p.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH,
+                "round": pad_shape(p) in (pcbnew.PAD_SHAPE_CIRCLE, pcbnew.PAD_SHAPE_OVAL),
                 "layers": [n for n, l in (("F", pcbnew.F_Cu), ("B", pcbnew.B_Cu)) if p.IsOnLayer(l)],
             })
         out["footprints"].append({

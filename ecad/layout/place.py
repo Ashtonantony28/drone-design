@@ -168,7 +168,7 @@ PARTS = {
     "PWR.C_5V1.C": (12.3, -0.55, 90, "B"),
     "PWR.C_5V2.C": (14.4, -0.55, 90, "B"),
     "PWR.C_5V3.C": (16.5, -0.55, 90, "B"),
-    "PWR.C_BOOT.C": (11.1, 5.65, 0, "B"),
+    "PWR.C_BOOT.C": (11.06, 5.6, 180, "B"),   # SW pad towards pin 3; BOOT is led round it (preroute.py MANUAL)
     "PWR.C_VCC.C": (9.2, 7.3, 90, "B"),
     "PWR.R_FBB.R": (8.1, 7.3, 90, "B"),
     "PWR.R_FBT.R": (7.0, 7.3, 90, "B"),
@@ -200,6 +200,8 @@ PARTS = {
 
 # Two-pad parts keep the rotation above or turn 180 degrees, whichever brings
 # their pads nearer to the pads they connect to (see auto_orient()).
+
+KEEP_ROTATION = ["PWR.C_BOOT.C"]   # two-pad parts whose rotation in the table is deliberate
 
 # Decoupling at the MCU pins (DESIGN.md 5.1): capacitor path -> (MCU pad, offset
 # along the pin row in mm). The capacitor sits perpendicular to the row, just
@@ -507,10 +509,11 @@ def main(board_path):
     decaps = [fps.pop(path) for path in MCU_DECAPS]
     for fp, (pad, along) in zip(decaps, MCU_DECAPS.values()):
         place_decap(fp, mcu, pad, along)
+    keep_rot = [fps[path] for path in KEEP_ROTATION]
     for path, (x, y, rot, side) in PARTS.items():
         put(fps.pop(path), x, y, rot, side)
     assert not fps, "unplaced footprints: %s" % sorted(fps)
-    auto_orient(footprints, skip=decaps)
+    auto_orient(footprints, skip=decaps + keep_rot)
 
     for fp in footprints:
         fp.SetLocked(True)

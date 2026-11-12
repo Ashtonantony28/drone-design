@@ -6,18 +6,23 @@
 Input is the geometry dump of the placed and pre-routed board; output is a
 list of tracks and vias (mm, board-centre coordinates) for route.py to add.
 
-Method: A* on a 0.1 mm grid over the two outer layers (L2 and L3 stay planes),
-8-direction moves plus vias, one connection at a time, short nets first.  A
-connection that cannot be completed is retried at the end by ripping up the
-routed nets in its way.  Clearances are baked into occupancy maps (copper
-inflated by clearance + half the track width), so a finished route is clean
-by construction; KiCad's DRC stays the judge (layout/run.sh drc).
+Method: A* on a 0.1 mm grid, 8-direction moves plus through vias, over L1, L4
+and (slow nets only, at a premium) L3; L2 stays an unbroken ground plane.
+Nets are routed by negotiated congestion (PathFinder): each net is routed as
+if alone and pays for cells inside another net's keep-off halo; the price
+rises until nets stop overlapping.  What still overlaps is taken out and put
+back strictly, with a targeted rip-up for the last connections.  Clearances
+are baked into the occupancy maps (copper inflated by clearance + half the
+track width), so the output is clean by construction; KiCad's DRC stays the
+judge (layout/run.sh drc).
 
 Pure Python + numpy, deterministic.
 """
 import heapq
 import json
 import math
+import os
+import pickle
 import sys
 import time
 
@@ -30,13 +35,16 @@ CORNER_R = 3.0
 HOLE_XY = 15.25
 HOLE_KEEPOUT_R = 3.5
 EDGE = 0.35
-CLR = 0.125                 # copper clearance used (rule 0.1)
-CLR_POWER = 0.175           # Power / USB classes (rule 0.15)
+CLR = 0.1                   # copper clearance (the rule; KiCad tests with a 5 um epsilon, the grid is exact)
+CLR_POWER = 0.15            # Power / USB classes (the rule)
 HOLE_CLR = 0.25             # hole to foreign copper (rule 0.2)
-TRACK = 0.15
+TRACK = 0.1
 WIDE = 0.4
 VIA_D, VIA_DRILL = 0.45, 0.3
 VIA_PITCH = 0.6
+VIA_EXTRA = 0.035           # more clearance around a via: keeps tracks 0.2 mm off the drill
+VIA_HOLE_CLR = 0.13         # via pad edge to foreign copper, so that its drill keeps the 0.2 mm hole clearance
+FIXED_EXTRA = 0.02          # pads and scripted copper are off the grid: a diagonal step may cut a corner by 17 um
 VIA_PAD_GAP = 0.05          # via edge to any SMD pad: no via-in-pad
 POWER_CLASS = {"5V", "VBUS", "VBAT", "PWR.IMU_LDO_IN", "USB_P", "USB_N"}
 WIDE_NETS = {"VBAT", "PWR.BUCK_SW"}   # 0.4 mm (they also get an L4 pour); they neck down at their pads
@@ -63,11 +71,12 @@ LANE_COST = 40              # per step in a foreign lane
 LANE_VIA_LEN = 1.0
 LANE_VIA_HALF = 0.43
 PRES_START = 10             # price of a cell inside another routed net's halo, first iteration
-PRES_GROWTH = 1.3           # ... multiplied each iteration
-PRES_MAX = 1500
+PRES_GROWTH = 1.25         # ... multiplied each iteration
+PRES_MAX = 3000
 HIST_FRACTION = 0.25        # a cell that stays contested gets this share of the price added for good
-MAX_ITERATIONS = 120
-PATIENCE = 30               # stop when the best state is this many iterations old
+MAX_ITERATIONS = 60
+RIPUP_ROUNDS = 8
+PATIENCE = 15               # stop when the best state is this many iterations old
 LAYERS = ("F", "I", "B")    # I = In2.Cu (L3); L2 stays an unbroken ground plane
 INNER_COST = 12             # per step on L3: outer layers first, L3 "where needed" (DESIGN.md 1)
 # nets that stay on the outer layers: fast edges, the buck, and the planes themselves
@@ -141,6 +150,8 @@ class Router:
         self.net_name = {}
         self.zones = {z["name"]: z for z in data["zones"]}
         self.parent = [0]          # union-find over copper components
+        self.rparent = [0]         # the same without the "joined by a plane" links (see plane_repair)
+        self.plane_links = {}      # net -> [(component, (x, y) or pad box)]
         self.comp_net = [0]
         self.anchor = {}           # (layer, y, x) -> exact point of pre-routed copper
         self.plane_comp = {}
@@ -170,6 +181,7 @@ class Router:
 
     def new_comp(self, net):
         self.parent.append(len(self.parent))
+        self.rparent.append(len(self.rparent))
         self.comp_net.append(self.nid(net))
         return len(self.parent) - 1
 
@@ -179,7 +191,17 @@ class Router:
             c = self.parent[c]
         return c
 
-    def union(self, a, b):
+    def rfind(self, c):
+        while self.rparent[c] != c:
+            self.rparent[c] = self.rparent[self.rparent[c]]
+            c = self.rparent[c]
+        return c
+
+    def union(self, a, b, plane=False):
+        if not plane:
+            ra, rb = self.rfind(a), self.rfind(b)
+            if ra != rb:
+                self.rparent[max(ra, rb)] = min(ra, rb)
         a, b = self.find(a), self.find(b)
         if a != b:
             self.parent[max(a, b)] = min(a, b)
@@ -202,7 +224,7 @@ class Router:
         c = (HOLE_CLR if net is None else self.clr(net)) + extra
         m = self.m
         cp = max(c, CLR_POWER + extra)
-        for name, r in (("T", c + TRACK / 2), ("Q", cp + NARROW_POWER / 2), ("W", cp + max(WIDE, VIA_D) / 2), ("V", c + VIA_D / 2)):
+        for name, r in (("T", c + TRACK / 2), ("Q", cp + NARROW_POWER / 2), ("W", max(cp, VIA_HOLE_CLR) + max(WIDE, VIA_D) / 2), ("V", max(c, VIA_HOLE_CLR) + VIA_D / 2)):
             if kind == "rect":
                 win = m.window(geom, r)
                 d = m.dist_rect(win, geom)
@@ -228,10 +250,10 @@ class Router:
         if p["npth"] or not p["net"]:
             for L in LAYERS if p["drill"] > 0 else layers:
                 self.fake += 1
-                self.stamp_halo(L, "rect", box, None if p["drill"] > 0 else "~nc%d" % self.fake)
+                self.stamp_halo(L, "rect", box, None if p["drill"] > 0 else "~nc%d" % self.fake, extra=FIXED_EXTRA)
         else:
             for L in layers:
-                self.stamp_halo(L, "rect", box, p["net"])
+                self.stamp_halo(L, "rect", box, p["net"], extra=FIXED_EXTRA)
         # no via in or against a pad (any net); holes keep their distance from everything
         r = VIA_D / 2 + (HOLE_CLR if p["drill"] > 0 else VIA_PAD_GAP)
         win = self.m.window(box, r)
@@ -245,16 +267,26 @@ class Router:
         for L in layers:
             inner = (box[0] + 0.05, box[1] + 0.05, box[2] - 0.05, box[3] - 0.05)
             win = self.m.window(box, 0)
-            mask = self.m.dist_rect(win, inner) < 1e-9
+            if p.get("round"):
+                # circle / oval: the corners of the bounding box are not copper
+                rad = min(box[2] - box[0], box[3] - box[1]) / 2
+                core = (box[0] + rad, box[1] + rad, box[2] - rad, box[3] - rad)
+                dcore = self.m.dist_rect(win, core)
+                mask = dcore <= rad - 0.05 + 1e-9
+            else:
+                mask = self.m.dist_rect(win, inner) < 1e-9
             if not mask.any():
                 d = np.hypot(self.m.X[win] - p["at"][0], self.m.Y[win] - p["at"][1])
                 mask = d <= d.min() + 1e-9
             self.set_comp(L, win, mask, c)
             for arr, half in ((self.m.deep[L], TRACK / 2), (self.m.deep_wide[L], WIDE / 2)):
-                if box[2] - box[0] >= 2 * half and box[3] - box[1] >= 2 * half:
+                if p.get("round"):
+                    arr[win] |= dcore <= rad - half + 1e-9
+                elif box[2] - box[0] >= 2 * half and box[3] - box[1] >= 2 * half:
                     arr[win] |= self.m.dist_rect(win, (box[0] + half, box[1] + half, box[2] - half, box[3] - half)) < 1e-9
         if p["drill"] > 0 and p["net"] in PLANES:
-            self.union(c, self.plane(p["net"]))
+            self.union(c, self.plane(p["net"]), plane=True)
+            self.plane_links.setdefault(p["net"], []).append((c, tuple(box)))
         return c
 
     def plane(self, net):
@@ -277,7 +309,7 @@ class Router:
     def add_track(self, t, exact=True):
         L = t["layer"][0]
         a, b, w = t["start"], t["end"], t["width"]
-        self.stamp_halo(L, "seg", (a, b, w), t["net"])
+        self.stamp_halo(L, "seg", (a, b, w), t["net"], extra=FIXED_EXTRA)
         c = self.new_comp(t["net"])
         win = self.m.window((min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])), 0.1)
         d = self.m.dist_seg(win, a, b)
@@ -298,7 +330,7 @@ class Router:
         p = v["at"]
         c = self.new_comp(v["net"])
         for L in LAYERS:
-            self.stamp_halo(L, "via", (p, v["dia"]), v["net"], extra=0.02)  # keeps tracks 0.2 mm off the drill
+            self.stamp_halo(L, "via", (p, v["dia"]), v["net"], extra=VIA_EXTRA)  # keeps tracks 0.2 mm off the drill
             win = self.m.window((p[0], p[1], p[0], p[1]), 0.1)
             d = np.hypot(self.m.X[win] - p[0], self.m.Y[win] - p[1])
             mask = d <= max(0.0708, d.min() + 1e-9)
@@ -310,7 +342,8 @@ class Router:
         win = self.m.window((p[0], p[1], p[0], p[1]), VIA_PITCH)
         self.m.viaban[win] |= np.hypot(self.m.X[win] - p[0], self.m.Y[win] - p[1]) < VIA_PITCH - 1e-9
         if v["net"] in PLANES and self.in_plane(p, v["net"]):
-            self.union(c, self.plane(v["net"]))
+            self.union(c, self.plane(v["net"]), plane=True)
+            self.plane_links.setdefault(v["net"], []).append((c, (p[0], p[1], p[0], p[1])))
         return c
 
     def build(self):
@@ -519,6 +552,7 @@ class Negotiator:
         self.nets = [n for n in nets if len(fx.components(n)) > 1]
         self.own = {}
         self.static = {}
+        self.state_file = None
 
     # ---- per-net constants ----------------------------------------------------
     def prepare(self, net):
@@ -707,7 +741,7 @@ class Negotiator:
             for v in (v for c in r["conns"] for v in c["vias"]):
                 p = v["at"]
                 for L in LAYERS:
-                    for k, win, mask in fx.halo(L, "via", (p, v["dia"]), net, extra=0.02):
+                    for k, win, mask in fx.halo(L, "via", (p, v["dia"]), net, extra=VIA_EXTRA):
                         r["stamps"].append((self.cnt[k][L], win, mask))
                 win = fx.m.window((p[0], p[1], p[0], p[1]), VIA_PITCH)
                 r["stamps"].append((self.vp, win, np.hypot(fx.m.X[win] - p[0], fx.m.Y[win] - p[1]) < VIA_PITCH - 1e-9))
@@ -767,6 +801,79 @@ class Negotiator:
         for n in self.routes:
             self.stamp(n)
 
+    # ---- the L3 pour as real copper ---------------------------------------------------
+    def plane_repair(self, net):
+        """Signals on L3 cut the pour of a plane net into pieces.  Work out the
+        pieces that survive (clearance and minimum width of the zone fill), see
+        which plane vias land on which piece, and route the pieces together like
+        any other net: on the outer layers, or by dropping a via into a piece."""
+        from scipy import ndimage
+        fx = self.fx
+        nid = fx.nid(net)
+        NN = N * N
+        if net in self.routes:
+            self.stamp(net, -1)
+        keep = self.routes[net]["conns"] if net in self.routes else []
+        poly = fx.zones[PLANES[net]]["outline"]
+        X, Y = fx.m.X, fx.m.Y
+        inside = np.zeros((N, N), bool)
+        for i in range(len(poly)):
+            (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % len(poly)]
+            if y1 != y2:
+                inside ^= ((y1 > Y) != (y2 > Y)) & (X < (x2 - x1) * (Y - y1) / (y2 - y1) + x1)
+        edge = ndimage.binary_erosion(inside, np.ones((3, 3), bool), iterations=2)
+        blocked = ((fx.m.T["I"] != 0) & (fx.m.T["I"] != nid)) | (self.cnt["T"]["I"] > 0)
+        # T halo = 0.15 mm off foreign copper; the fill needs 0.15 clearance + half of its 0.15 min width
+        blocked = ndimage.binary_dilation(blocked, np.ones((3, 3), bool))
+        pour = edge & ~blocked
+        lab, count = ndimage.label(pour)
+        # groups: copper components (without plane links) and the pour pieces their vias land on
+        parent = {}
+
+        def find(a):
+            while parent.setdefault(a, a) != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+
+        ids = [c for c in range(1, len(fx.parent)) if fx.comp_net[c] == nid and c != fx.plane_comp.get(net)]
+        for c in ids:
+            parent[find(("c", c))] = find(("c", fx.rfind(c)))
+        for c, box in fx.plane_links.get(net, []):
+            win = fx.m.window(box, 0.25)
+            near = lab[win][fx.m.dist_rect(win, box) <= 0.225]
+            for piece in set(near[near > 0].tolist()):
+                parent[find(("p", piece))] = find(("c", c))
+        st = dict(self.prepare(net))
+        groups = {}
+        for c in ids:
+            groups.setdefault(find(("c", c)), ([], []))[0].append(c)
+        used = np.zeros((N, N), bool)
+        for piece in range(1, count + 1):
+            if ("p", piece) in parent:
+                groups[find(("p", piece))][1].append(piece)
+                used |= lab == piece
+        passable = list(st["passable"])
+        li_i = LAYERS.index("I")
+        passable[li_i] = passable[li_i] | used
+        comps = []
+        for cids, pieces in groups.values():
+            cells = set()
+            for li, L in enumerate(LAYERS):
+                flat = np.flatnonzero(np.isin(fx.m.comp[L], cids) & passable[li])
+                cells.update((flat + li * NN).tolist())
+            if pieces:
+                cells.update((np.flatnonzero(np.isin(lab, pieces)) + li_i * NN).tolist())
+            comps.append([False, cells])
+        max(comps, key=lambda c: len(c[1]))[0] = True
+        st.update(passable=passable, fr=b"".join(a.astype(np.uint8).tobytes() for a in passable),
+                  comps=[(a, b) for a, b in comps])
+        self.static[net] = st
+        print("plane %s: L3 pour in %d pieces, %d groups to join" % (net, len({find(("p", k)) for k in range(1, count + 1) if ("p", k) in parent}), len(comps)), flush=True)
+        left = self.route(net, 0, hard=True, keep=keep)
+        print("plane %s: %d left open" % (net, left), flush=True)
+        return left
+
     # ---- driver ---------------------------------------------------------------------
     def run(self):
         data = self.data
@@ -778,60 +885,105 @@ class Negotiator:
 
         order = [n for n in FIRST if n in self.nets] + sorted((n for n in self.nets if n not in FIRST), key=lambda n: (n in PLANES, size(n), n))
         t0 = time.time()
-        pres = PRES_START
-        todo = list(order)
-        best = None
-        for it in range(MAX_ITERATIONS):
-            for n in todo:
-                if n in self.routes:
-                    self.stamp(n, -1)
-                self.route(n, pres)
-            conf = {n: self.conflicts(n) for n in order}
-            step = max(2, int(pres * HIST_FRACTION))
-            for cells in conf.values():
-                for L, y, x in cells:
-                    self.hist[L][y, x] += step
-            bad = [n for n in order if conf[n]]
-            opened = [n for n in order if self.routes[n]["open"]]
-            total = sum(len(c) for c in conf.values())
-            print("iteration %d: %d nets rerouted, %d in conflict (%d cells), %d with open connections, %.0f s" % (
-                it + 1, len(todo), len(bad), total, len(opened), time.time() - t0), flush=True)
-            score = (len(opened), total)
-            if best is None or score < best[0]:
-                best = (score, it, self.snapshot())
-            if not bad and not opened:
-                break
-            if it - best[1] >= PATIENCE:
-                break
-            todo = [n for n in order if conf[n] or self.routes[n]["open"]]
-            pres = min(int(pres * PRES_GROWTH) + 1, PRES_MAX)
-        self.restore(best[2])
-        self.report_conflicts(order)
-        # Legalise: take out the connection with the most overlap until nothing
-        # overlaps, then put those connections back strictly around everything else.
-        ripped = set()
-        while True:
-            worst = None
-            for n in order:
-                for k, bad in enumerate(self.conflicts(n, per_conn=True)):
-                    key = (len(bad), -len(self.routes[n]["conns"][k]["cells"]))
-                    if bad and (worst is None or key > worst[0]):
-                        worst = (key, n, k)
-            if worst is None:
-                break
-            _, n, k = worst
-            self.stamp(n, -1)
-            r = self.routes[n]
-            self.routes[n] = {"conns": r["conns"][:k] + r["conns"][k + 1:], "stamps": [], "open": r["open"] + 1}
-            self.stamp(n)
-            ripped.add(n)
-        print("legalise: connections taken out of %d nets (%s)" % (len(ripped), ", ".join(sorted(ripped))), flush=True)
-        for attempt in range(3):
-            for n in sorted((n for n in order if self.routes[n]["open"]), key=lambda n: (size(n), n)):
+        resume = os.environ.get("AUTOROUTE_RESUME")   # debugging aid: skip the negotiation, start from a saved state
+        if resume:
+            self.routes = {}
+            self.restore(pickle.load(open(resume, "rb")))
+        else:
+            pres = PRES_START
+            todo = list(order)
+            best = None
+            for it in range(MAX_ITERATIONS):
+                for n in todo:
+                    if n in self.routes:
+                        self.stamp(n, -1)
+                    self.route(n, pres)
+                conf = {n: self.conflicts(n) for n in order}
+                step = max(2, int(pres * HIST_FRACTION))
+                for cells in conf.values():
+                    for L, y, x in cells:
+                        self.hist[L][y, x] += step
+                bad = [n for n in order if conf[n]]
+                opened = [n for n in order if self.routes[n]["open"]]
+                total = sum(len(c) for c in conf.values())
+                print("iteration %d: %d nets rerouted, %d in conflict (%d cells), %d with open connections, %.0f s" % (
+                    it + 1, len(todo), len(bad), total, len(opened), time.time() - t0), flush=True)
+                score = (len(opened), total)
+                if best is None or score < best[0]:
+                    best = (score, it, self.snapshot())
+                if not bad and not opened:
+                    break
+                if it - best[1] >= PATIENCE:
+                    break
+                todo = [n for n in order if conf[n] or self.routes[n]["open"]]
+                pres = min(int(pres * PRES_GROWTH) + 1, PRES_MAX)
+            self.restore(best[2])
+            self.report_conflicts(order)
+            # Legalise: take out the connection with the most overlap until nothing
+            # overlaps, then put those connections back strictly around everything else.
+            ripped = set()
+            while True:
+                worst = None
+                for n in order:
+                    for k, bad in enumerate(self.conflicts(n, per_conn=True)):
+                        key = (len(bad), -len(self.routes[n]["conns"][k]["cells"]))
+                        if bad and (worst is None or key > worst[0]):
+                            worst = (key, n, k)
+                if worst is None:
+                    break
+                _, n, k = worst
                 self.stamp(n, -1)
-                self.route(n, 0, hard=True, keep=self.routes[n]["conns"])
-            if not any(self.routes[n]["open"] for n in order):
+                r = self.routes[n]
+                self.routes[n] = {"conns": r["conns"][:k] + r["conns"][k + 1:], "stamps": [], "open": r["open"] + 1}
+                self.stamp(n)
+                ripped.add(n)
+            print("legalise: connections taken out of %d nets (%s)" % (len(ripped), ", ".join(sorted(ripped))), flush=True)
+            for attempt in range(3):
+                for n in sorted((n for n in order if self.routes[n]["open"]), key=lambda n: (size(n), n)):
+                    self.stamp(n, -1)
+                    self.route(n, 0, hard=True, keep=self.routes[n]["conns"])
+                if not any(self.routes[n]["open"] for n in order):
+                    break
+            if self.state_file:
+                pickle.dump(self.snapshot(), open(self.state_file, "wb"))
+        # Targeted rip-up: let an open net through at a price, take out the
+        # connections it crosses, re-route those strictly; keep the change only
+        # if fewer connections are open afterwards.
+        def total_open():
+            return sum(self.routes[n]["open"] for n in order)
+
+        for round_no in range(RIPUP_ROUNDS):
+            improved = False
+            for n in sorted((n for n in order if self.routes[n]["open"]), key=lambda n: (size(n), n)):
+                snap, before = self.snapshot(), total_open()
+                self.stamp(n, -1)
+                self.route(n, PRES_MAX // 4, keep=self.routes[n]["conns"])
+                victims = []
+                for m in order:
+                    if m == n:
+                        continue
+                    per = self.conflicts(m, per_conn=True)
+                    if any(per):
+                        self.stamp(m, -1)
+                        r = self.routes[m]
+                        self.routes[m] = {"conns": [c for c, bad in zip(r["conns"], per) if not bad], "stamps": [], "open": r["open"] + 1}
+                        self.stamp(m)
+                        victims.append(m)
+                for m in sorted(victims, key=lambda m: (size(m), m)):
+                    self.stamp(m, -1)
+                    self.route(m, 0, hard=True, keep=self.routes[m]["conns"])
+                if total_open() < before and not self.conflicts(n):
+                    improved = True
+                else:
+                    self.restore(snap)
+            print("rip-up round %d: %d connections open, %.0f s" % (round_no + 1, total_open(), time.time() - t0), flush=True)
+            if not improved or total_open() == 0:
                 break
+        for n in PLANES:
+            if PLANES[n]:
+                self.plane_repair(n)
+                if n not in order:
+                    order.append(n)
         left = {n: self.routes[n]["open"] for n in order if self.routes[n]["open"]}
         tracks = [t for n in order for c in self.routes[n]["conns"] for t in c["tracks"]]
         vias = [v for n in order for c in self.routes[n]["conns"] for v in c["vias"]]
@@ -841,6 +993,7 @@ class Negotiator:
 def main(src, dst):
     data = json.load(open(src))
     r = Negotiator(data)
+    r.state_file = dst + ".state"
     tracks, vias, left = r.run()
     json.dump({"tracks": tracks, "vias": vias}, open(dst, "w"), indent=0)
     print("autoroute: %d tracks, %d vias, %d connections left open" % (len(tracks), len(vias), sum(left.values())))

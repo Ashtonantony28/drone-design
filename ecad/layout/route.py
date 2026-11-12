@@ -157,9 +157,9 @@ def finish(board_path):
     names = {z.GetZoneName() for z in board.Zones()}
     e = BOARD_SIZE / 2 - EDGE_INSET
     if "L1_GND" not in names:
-        add_zone(board, "GND", pcbnew.F_Cu, rect(-e, -e, e, e), name="L1_GND", solid=False, clearance=0.2)
+        add_zone(board, "GND", pcbnew.F_Cu, rect(-e, -e, e, e), name="L1_GND", solid=True, clearance=0.2)
     if "L4_GND" not in names:
-        add_zone(board, "GND", pcbnew.B_Cu, rect(-e, -e, e, e), name="L4_GND", solid=False, clearance=0.2)
+        add_zone(board, "GND", pcbnew.B_Cu, rect(-e, -e, e, e), name="L4_GND", solid=True, clearance=0.2)
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     board.Save(board_path)
     print("finished: zones", sorted(z.GetZoneName() for z in board.Zones()))

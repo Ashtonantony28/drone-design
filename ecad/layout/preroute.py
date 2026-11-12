@@ -9,6 +9,7 @@ locked copper before the Specctra export:
 
   1. MCU supply pin -> its decoupling capacitor, straight          (DESIGN.md 5.1)
   2. DShot: MCU pin -> via under the MCU -> 33R resistor on L4      (DESIGN.md 5.5)
+     switch node: buck SW pad -> inductor; straight links between facing pads of one net
   3. one via beside every pad on a plane net (GND on L2; 3V3_D,
      3V3_IMU on L3 where their pour is under the pad)             (DESIGN.md 5.1/5.4)
   4. GND stitching vias along the board edges and around the buck  (DESIGN.md 5.4)
@@ -50,6 +51,14 @@ DSHOT = {"MOTOR0": "CONN.R_M1.R", "MOTOR1": "CONN.R_M2.R", "MOTOR2": "CONN.R_M3.
 BUCK = "PWR.U6.X"
 INDUCTOR = "PWR.L1.X"
 SW_NET = "PWR.BUCK_SW"
+L3_LINKS = [("VBAT", "PWR.C_VBAT3.C", "PWR.C_VBAT1.C", 0.5)]   # net, pad, pad, track width on In2.Cu
+# Hand-drawn tracks where the geometry leaves one sensible path: (net, layer, width, points)
+MANUAL = [
+    # bootstrap: buck pin 4 down past the VCC pin, under the capacitor's SW pad, up into its BOOT pad
+    ("PWR.BUCK_BOOT", "B", 0.15, [(9.6, 5.0), (9.6, 5.9), (9.95, 6.25), (11.3, 6.25), (11.54, 5.85)]),
+    # switch node to the bootstrap capacitor: out of pin 3, down between pin 4 and the input capacitor
+    ("PWR.BUCK_SW", "B", 0.2, [(9.7, 4.475), (10.0, 4.475), (10.1, 4.6), (10.1, 5.0), (10.45, 5.45)]),
+]
 STITCH_PITCH = 3.0
 STITCH_INSET = 0.9
 # exposed pads that take vias in the pad: the DNP FPGA's ground pad (no other
@@ -155,8 +164,8 @@ class Router:
         if not self.on_board(c, EDGE + r):
             return False
         for p in self.pads:
-            if p is in_pad:
-                continue
+            if p is in_pad or (p["net"] == net and (p["path"], p["number"]) in VIA_IN_PAD):
+                continue   # a thermal pad takes vias of its own net (DESIGN.md 1)
             d = point_rect(c, p["box"])
             if d > 1.2:
                 continue
@@ -301,6 +310,111 @@ class Router:
                 return
         self.log.append("switch-node link failed")
 
+    def manual(self):
+        for net, layer, width, pts in MANUAL:
+            if all(self.track_ok(a, b, width, layer, net, lanes=False) for a, b in zip(pts, pts[1:])):
+                for a, b in zip(pts, pts[1:]):
+                    self.add_track(a, b, width, layer, net)
+            else:
+                self.log.append("manual track blocked: %s" % net)
+
+    # ---- 2d. VBAT across the buck on L3 (DESIGN.md 1: VBAT on L3) ---------------
+    def l3_links(self):
+        """The buck has a VIN pin and capacitors on both sides, with the switch
+        node between them: the two sides are joined on L3, straight under it."""
+        for net, pa, pb, width in L3_LINKS:
+            a, b = self.pad(pa, net=net), self.pad(pb, net=net)
+            best = None
+            for side in (1, -1):
+                for i in range(6, 30):
+                    y = (max(a["box"][3], b["box"][3]) + 0.05 * i) if side > 0 else (min(a["box"][1], b["box"][1]) - 0.05 * i)
+                    for dxa in (0.0, 0.3, -0.3, 0.6, -0.6):
+                        for dxb in (0.0, -0.3, 0.3, -0.6, 0.6):
+                            ca, cb = (a["at"][0] + dxa, y), (b["at"][0] + dxb, y)
+                            ea = (ca[0], a["box"][3] - 0.2 if side > 0 else a["box"][1] + 0.2)
+                            eb = (cb[0], b["box"][3] - 0.2 if side > 0 else b["box"][1] + 0.2)
+                            if not (self.via_ok(ca, net, dia=0.6) and self.via_ok(cb, net, dia=0.6)):
+                                continue
+                            if not (self.track_ok(ea, ca, 0.4, a["layers"][0], net) and self.track_ok(eb, cb, 0.4, b["layers"][0], net)):
+                                continue
+                            if not self.track_ok(ca, cb, width, "I", net):
+                                continue
+                            best = (ca, cb, ea, eb)
+                            break
+                        if best:
+                            break
+                    if best:
+                        break
+                if best:
+                    break
+            if not best:
+                self.log.append("L3 link failed: %s %s - %s" % (net, pa, pb))
+                continue
+            ca, cb, ea, eb = best
+            self.add_track(ea, ca, 0.4, a["layers"][0], net)
+            self.add_track(eb, cb, 0.4, b["layers"][0], net)
+            self.add_via(ca, net, dia=0.6)
+            self.add_via(cb, net, dia=0.6)
+            self.add_track(ca, cb, width, "I", net)
+
+    # ---- 2c. neighbours: pads of one net that face each other get a straight link ----
+    def short_links(self, reach=1.3):
+        """A capacitor beside its pin, two pins of one rail on a small package:
+        the straight track is the only sensible route, and left to the maze
+        router the gap between the pads gets used by something else first."""
+        by_net = {}
+        for i, p in enumerate(self.pads):
+            if p["net"] and p["net"] not in PLANES and not p["through"] and p["layers"]:
+                by_net.setdefault(p["net"], []).append(i)
+        made = 0
+        for net, idx in sorted(by_net.items()):
+            group = {i: i for i in idx}
+
+            def find(i):
+                while group[i] != i:
+                    i = group[i]
+                return i
+            # copper already laid for this net joins the pads it touches
+            for t in self.tracks:
+                if t["net"] == net:
+                    hit = [i for i in idx if t["layer"] in self.pads[i]["layers"] and
+                           (point_rect(t["start"], self.pads[i]["box"]) < 1e-6 or point_rect(t["end"], self.pads[i]["box"]) < 1e-6)]
+                    for i in hit[1:]:
+                        group[find(i)] = find(hit[0])
+            pairs = []
+            for n, i in enumerate(idx):
+                for j in idx[n + 1:]:
+                    a, b = self.pads[i], self.pads[j]
+                    if a["layers"] != b["layers"]:
+                        continue
+                    gap = math.hypot(max(a["box"][0] - b["box"][2], b["box"][0] - a["box"][2], 0.0),
+                                     max(a["box"][1] - b["box"][3], b["box"][1] - a["box"][3], 0.0))
+                    if gap <= reach:
+                        pairs.append((gap, i, j))
+            for gap, i, j in sorted(pairs):
+                if find(i) == find(j):
+                    continue
+                a, b = self.pads[i], self.pads[j]
+                layer = a["layers"][0]
+                small = min(a["box"][2] - a["box"][0], a["box"][3] - a["box"][1], b["box"][2] - b["box"][0], b["box"][3] - b["box"][1])
+                for w in ((0.25, 0.2, 0.15) if net in WIDE_NETS or net.startswith("PWR.") or net == SW_NET else (0.15,)):
+                    if w > small + 1e-9:
+                        continue
+                    h = w / 2
+
+                    def inside(p, q):   # the point of pad p nearest to q, half a track width inside the pad
+                        bx = p["box"]
+                        return (min(max(q[0], bx[0] + h), bx[2] - h), min(max(q[1], bx[1] + h), bx[3] - h))
+                    s = inside(a, b["at"])
+                    e = inside(b, s)
+                    s = inside(a, e)
+                    if self.track_ok(s, e, w, layer, net, lanes=False):
+                        self.add_track(s, e, w, layer, net)
+                        group[find(i)] = find(j)
+                        made += 1
+                        break
+        return made
+
     # ---- 3. plane fan-out ---------------------------------------------------
     def fanout(self, skip):
         todo = [p for p in self.pads if p["net"] in PLANES and not p["through"] and p["layers"]
@@ -416,11 +530,14 @@ def main(src, dst):
     linked = r.mcu_decaps()
     r.dshot()
     r.switch_node()
+    r.l3_links()
+    r.manual()
+    links = r.short_links()
     r.fanout(skip=linked)
     n_fan = len(r.vias)
     edge, buck = r.stitch()
     json.dump({"tracks": r.tracks, "vias": r.vias}, open(dst, "w"), indent=0)
-    print("pre-route: %d tracks, %d vias (%d fan-out/DShot, %d edge stitching, %d around the buck)" % (len(r.tracks), len(r.vias), n_fan, edge, buck))
+    print("pre-route: %d tracks, %d vias (%d fan-out/DShot, %d edge stitching, %d around the buck), %d neighbour links" % (len(r.tracks), len(r.vias), n_fan, edge, buck, links))
     for line in r.log:
         print("  note:", line)
 

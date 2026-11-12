@@ -31,12 +31,19 @@ for step in $steps; do
     plot) $PY layout/plot.py "$OUT/board.json" "$OUT/view" $( [ -f "$OUT/drc.json" ] && echo "$OUT/drc.json" ) && $PY layout/overlaps.py "$OUT/board.json" ;;
     pre) $PY layout/preroute.py "$OUT/board.json" "$OUT/preroute.json" &&
         kicad python3 layout/route.py apply "$BOARD" "$OUT/preroute.json" locked &&
-        kicad python3 layout/dump.py "$BOARD" "$OUT/pre.json" ;;
-    auto) $PY layout/autoroute.py "$OUT/pre.json" "$OUT/autoroute.json" &&
+        kicad python3 layout/dump.py "$BOARD" "$OUT/pre.json" && cp "$BOARD" "$OUT/prerouted.kicad_pcb" ;;
+    auto) $PY layout/autoroute.py "$OUT/pre.json" "$OUT/autoroute.json" && cp "$OUT/prerouted.kicad_pcb" "$BOARD" &&
         kicad python3 layout/route.py apply "$BOARD" "$OUT/autoroute.json" unlocked ;;
     finish) kicad python3 layout/route.py finish "$BOARD" ;;
     drc) kicad kicad-cli pcb drc --format json --severity-all --units mm -o "$OUT/drc.json" "$BOARD" >/dev/null &&
         $PY layout/drc_summary.py "$OUT/drc.json" ;;
+    fab) FAB=fab; rm -rf "$FAB"; mkdir -p "$FAB/gerbers"
+        kicad kicad-cli pcb export gerbers -o "$FAB/gerbers/" --no-protel-ext --subtract-soldermask \
+            --layers F.Cu,In1.Cu,In2.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts "$BOARD"
+        kicad kicad-cli pcb export drill -o "$FAB/gerbers/" --format excellon --excellon-units mm --excellon-separate-th \
+            --generate-map --map-format gerberx2 "$BOARD"
+        kicad kicad-cli pcb export pos -o "$FAB/nf_fc-pos.csv" --format csv --units mm --side both --exclude-dnp "$BOARD"
+        kicad kicad-cli pcb export step -o "$FAB/nf_fc.step" --force --subst-models --no-dnp "$BOARD" ;;
     *) echo "unknown step $step" >&2; exit 2 ;;
     esac
 done
