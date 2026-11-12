@@ -1,0 +1,36 @@
+{
+ "mesh": {
+  "nodes": 10608,
+  "tets": 29659,
+  "dofs": 183645
+ },
+ "failures": [],
+ "thrust": {
+  "force_per_motor_n": 4.009791337343948,
+  "max_von_mises_mpa": 9.858570788006238,
+  "max_deflection_mm": 0.10441761331782862,
+  "safety_factor": 35.50210345152705
+ },
+ "crash": {
+  "force_n": 46.84594416964278,
+  "max_von_mises_mpa": 206.33697078180427,
+  "max_deflection_mm": 4.099662810559693,
+  "safety_factor": 1.6962544263098418
+ },
+ "modal": {
+  "freqs_hz": [
+   220.93201529270672,
+   226.11244197943387,
+   226.20760333010253,
+   235.6670728029065,
+   425.0731000178422,
+   506.20351976028235
+  ],
+  "duct_mass_g": 8.298023305571164,
+  "pad_mass_g": 10.4,
+  "separation_nominal": 0.21030216538620994,
+  "hover_rotor_hz_nominal": 279.7677866253183,
+  "separation_pessimistic": 0.289480894332378,
+  "hover_rotor_hz_pessimistic": 310.94451019035347
+ }
+}

@@ -1,0 +1,28 @@
+mass: 0.2436
+inertia:
+- 0.0004249
+- 0.0004376
+- 0.0007382
+arm_xy: 0.05
+thrust_max: 2.56
+thrust_curve_a: 0.1966
+yaw_torque_coeff: 0.0107
+motor_tau_up: 0.03
+motor_tau_down: 0.045
+idle_command: 0.05
+lin_drag:
+- 0.1
+- 0.1
+- 0.15
+rot_drag:
+- 1.0e-05
+- 1.0e-05
+- 1.5e-05
+gravity: 9.81
+control_rate_hz: 500
+rate_loop_hz: 1000
+latency_s: 0.003
+max_body_rate:
+- 10.0
+- 10.0
+- 6.0

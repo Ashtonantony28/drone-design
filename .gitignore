@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+runs/*/last.pt
+runs/*/progress.csv
+runs/*/config.yaml
+out/mech_checks.json

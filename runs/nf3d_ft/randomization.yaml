@@ -1,0 +1,39 @@
+mass:
+- 0.85
+- 1.15
+inertia:
+- 0.8
+- 1.2
+thrust_max:
+- 0.72
+- 1.15
+per_motor_thrust_imbalance:
+- 0.95
+- 1.05
+yaw_torque_coeff:
+- 0.8
+- 1.2
+motor_tau:
+- 0.7
+- 1.3
+lin_drag:
+- 0.5
+- 1.5
+latency_s:
+- 0.0
+- 0.008
+gyro_noise_std:
+- 0.0
+- 0.05
+gyro_bias:
+- -0.05
+- 0.05
+accel_noise_std:
+- 0.0
+- 0.3
+vel_noise_std:
+- 0.0
+- 0.1
+pos_noise_std:
+- 0.0
+- 0.05

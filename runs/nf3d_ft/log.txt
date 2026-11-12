@@ -1,0 +1,7 @@
+it    1 (critic warm-up) surv 1.000 ret    2.80 len    33 std 0.100 vf 2.8561 kl 0.0131
+it   10 (critic warm-up) surv 1.000 ret   66.28 len   608 std 0.100 vf 3.7049 kl 0.0045
+it   20 (critic warm-up) surv 1.000 ret  153.19 len  1250 std 0.100 vf 1.3721 kl 0.0041
+it   30 (critic warm-up) surv 1.000 ret  181.55 len  1500 std 0.100 vf 0.6946 kl 0.0057
+it   40 (critic warm-up) surv 1.000 ret  174.59 len  1500 std 0.100 vf 0.4600 kl 0.0060
+it   50 surv 1.000 ret  173.86 len  1500 std 0.096 vf 0.6141 kl 0.0031
+it   60 surv 1.000 ret  171.43 len  1500 std 0.092 vf 0.4969 kl 0.0036

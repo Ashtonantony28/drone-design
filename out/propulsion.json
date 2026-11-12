@@ -1,0 +1,120 @@
+{
+ "nominal": {
+  "corner": "nominal",
+  "mass_kg": 0.23198240136906637,
+  "weight_n": 2.275747357430541,
+  "failures": [],
+  "max_full": {
+   "u": 1.0,
+   "omega": 4666.662939063306,
+   "rpm": 44563.34846974065,
+   "thrust_per_motor_n": 4.009791337343948,
+   "motor_current_a": 15.406894420519947,
+   "battery_current_a": 67.18228318027083,
+   "v_bat": 12.76906333404761,
+   "elec_power_w": 857.8548288547997
+  },
+  "max_nominal": {
+   "u": 1.0,
+   "omega": 4261.0093379351,
+   "rpm": 40689.64192158573,
+   "thrust_per_motor_n": 3.3429807597904406,
+   "motor_current_a": 12.891490849222281,
+   "battery_current_a": 56.26880019142243,
+   "v_bat": 11.423872500623965,
+   "elec_power_w": 642.8075991498952
+  },
+  "max_empty": {
+   "u": 1.0,
+   "omega": 3920.262620862545,
+   "rpm": 37435.75045971977,
+   "thrust_per_motor_n": 2.829692400635429,
+   "motor_current_a": 10.9516262906081,
+   "battery_current_a": 47.857814434001526,
+   "v_bat": 10.328531879799833,
+   "elec_power_w": 494.30096207912936
+  },
+  "thrust_to_weight_nominal": 5.87583810456864,
+  "thrust_to_weight_empty": 4.973649454358283,
+  "hover": {
+   "u": 0.28141086205752686,
+   "omega": 1757.8328463463536,
+   "rpm": 16786.067197519096,
+   "thrust_per_motor_n": 0.5689368393576362,
+   "motor_current_a": 2.3241693697175148,
+   "battery_current_a": 3.0146893959096492,
+   "v_bat": 14.619119129955426,
+   "elec_power_w": 44.07210341861652
+  },
+  "hover_time_min": 8.757121060570851,
+  "hover_rotor_hz": 279.7677866253183,
+  "hover_blade_pass_hz": 839.3033598759549,
+  "motor_tau_hover_s": 0.014364552803435711,
+  "thrust_curve_a": 0.2655591562017763,
+  "thrust_curve_fit_rms": 0.04397001806544011,
+  "thrust_max_n": 3.3429807597904406,
+  "yaw_torque_coeff_m": 0.007579754164751514,
+  "battery_c_hover": 5.481253447108453,
+  "battery_c_wot": 122.14960578231059,
+  "esc_current_fraction": 0.44019698344342706
+ },
+ "pessimistic": {
+  "corner": "pessimistic",
+  "mass_kg": 0.24358152143751968,
+  "weight_n": 2.389534725302068,
+  "failures": [],
+  "max_full": {
+   "u": 1.0,
+   "omega": 4420.674436458578,
+   "rpm": 42214.331301741695,
+   "thrust_per_motor_n": 3.0584747204051124,
+   "motor_current_a": 16.514331320780776,
+   "battery_current_a": 72.00176272643914,
+   "v_bat": 12.479894808013043,
+   "elec_power_w": 898.5744248174749
+  },
+  "max_nominal": {
+   "u": 1.0,
+   "omega": 4044.440868193718,
+   "rpm": 38621.565372954414,
+   "thrust_per_motor_n": 2.560028565119194,
+   "motor_current_a": 13.866350052585375,
+   "battery_current_a": 60.51230705506966,
+   "v_bat": 11.16926248289847,
+   "elec_power_w": 675.877840943822
+  },
+  "max_empty": {
+   "u": 1.0,
+   "omega": 3727.885280222159,
+   "rpm": 35598.682177612325,
+   "thrust_per_motor_n": 2.1749681881524925,
+   "motor_current_a": 11.817461488359777,
+   "battery_current_a": 51.62773485101108,
+   "v_bat": 10.10233624932681,
+   "elec_power_w": 521.5607372560022
+  },
+  "thrust_to_weight_nominal": 4.285400899199025,
+  "thrust_to_weight_empty": 3.6408229018350817,
+  "hover": {
+   "u": 0.32601513452352227,
+   "omega": 1953.721977776182,
+   "rpm": 18656.670611421207,
+   "thrust_per_motor_n": 0.5973836813255173,
+   "motor_current_a": 3.3630415523183954,
+   "battery_current_a": 4.939337665851544,
+   "v_bat": 14.503640379698785,
+   "elec_power_w": 71.6383772194116
+  },
+  "hover_time_min": 5.344846168853417,
+  "hover_rotor_hz": 310.94451019035347,
+  "hover_blade_pass_hz": 932.8335305710605,
+  "motor_tau_hover_s": 0.013527256562116438,
+  "thrust_curve_a": 0.19656551600179628,
+  "thrust_curve_fit_rms": 0.04582025587121913,
+  "thrust_max_n": 2.560028565119194,
+  "yaw_torque_coeff_m": 0.01070082940906096,
+  "battery_c_hover": 8.980613937911897,
+  "battery_c_wot": 130.91229586625298,
+  "esc_current_fraction": 0.4718380377365936
+ }
+}

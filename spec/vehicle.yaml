@@ -1,0 +1,101 @@
+# Single source of truth for the airframe. Every script reads this file;
+# never retype these numbers elsewhere. SI units unless the key says mm/g.
+name: NF-3D
+description: 3-inch ducted quad, 4S, carries the neuroflight-fc 36x36 mm FC
+
+geometry_mm:
+  arm_xy: 50.0            # |x| = |y| of each motor axis from the frame centre (X layout)
+  prop_diameter: 76.2     # 3.0 in tri-blade
+  prop_tip_gap: 1.0       # radial gap prop tip -> duct inner wall
+  duct_wall: 1.2
+  duct_height: 19.5
+  duct_lip_radius: 3.0    # rounded inlet lip (adds static thrust, stiffens the ring)
+  duct_spokes: 3
+  bottom_plate_thickness: 3.0
+  top_plate_thickness: 1.5
+  stack_spacing: 30.5     # FC / ESC mount pattern
+  stack_hole: 3.2
+  stack_clamp_diameter: 7.0   # M3 standoff hex flange / washer footprint clamped to the plate
+  prop_band: 6.0          # axial thickness of the spinning prop (hub height)
+  prop_axial_margin: 0.5  # duct must extend this far past the prop band at each end
+  standoff_height: 26.0   # bottom plate top face -> top plate bottom face (ESC + FC + receiver)
+  motor_mount_circle: 12.0  # 1404 class: 4x M2 on a 12 mm circle (VERIFY vs chosen motor)
+  motor_mount_hole: 2.2
+  motor_shaft_clearance: 5.5
+  arm_width: 16.0
+  ring_extension: 3.0     # plate ring radial width beyond the duct OD
+  spoke_width: 5.0
+  side_bridge_width: 8.0  # plate bridges joining neighbouring duct rings (closed perimeter)
+  plate_fillet: 6.0       # radius on the plate's vertical edges (arm roots, bridges)
+  centre_body: 50.0       # square centre section side length
+  min_clearance: 1.0      # required gap between any two non-touching parts
+
+materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
+  carbon_3k_quasi_iso: {density: 1550, E: 5.0e+10, nu: 0.30, strength: 3.5e+8}
+  pa12_cf_print:       {density: 1080, E: 3.5e+9,  nu: 0.35, strength: 4.5e+7}
+  aluminium_7075:      {density: 2810, E: 7.2e+10, nu: 0.33, strength: 5.0e+8}
+
+# Bought parts: catalogue mass and the simple envelope used for the mass model
+# and the interference checks. Masses are typical datasheet values (VERIFY when
+# the exact SKU is bought; neuroflight-fc hw/ORDER-LIST.md lists candidates).
+parts:
+  motor:      {qty: 4, mass_g: 9.0,  envelope_mm: {diameter: 18.5, height: 15.5}, ref: "1404 4600KV (XING2/T-Motor class)"}
+  prop:       {qty: 4, mass_g: 1.4,  ref: "Gemfan D76 3in tri-blade"}
+  esc_4in1:   {qty: 1, mass_g: 9.5,  envelope_mm: {x: 36.0, y: 36.0, z: 6.0}, ref: "30.5 mm AM32 4-in-1, 35-45 A"}
+  fc:         {qty: 1, mass_g: 7.0,  envelope_mm: {x: 36.0, y: 36.0, z: 5.0}, ref: "neuroflight-fc v1 (this repo ecad/)"}
+  receiver:   {qty: 1, mass_g: 1.5,  envelope_mm: {x: 12.0, y: 10.0, z: 3.5}, ref: "ELRS 2.4 GHz nano"}
+  flow_tof:   {qty: 1, mass_g: 2.5,  envelope_mm: {x: 22.0, y: 12.0, z: 6.0}, ref: "MicoAir MTF-01 class"}
+  battery:    {qty: 1, mass_g: 69.0, envelope_mm: {x: 55.0, y: 30.0, z: 20.0}, ref: "4S 550 mAh 75C XT30 (e.g. CNHL/GNB 550 class)"}
+  hardware:   {qty: 1, mass_g: 7.0,  ref: "M2/M3 screws, standoffs (modelled), grommets, strap"}
+  wiring:     {qty: 1, mass_g: 6.0,  ref: "XT30 pigtail, motor leads, harness"}
+
+electrical:
+  cells: 4
+  cell_v_nominal: 3.7
+  cell_v_full: 4.2
+  cell_v_empty: 3.3       # landing voltage under load
+  capacity_mah: 550
+  c_rating_continuous: 75
+  c_rating_burst: 150     # 1-2 s; full-throttle punches are bursts
+  pack_ir_ohm: 0.060      # whole pack, fresh 75C 650 mAh (VERIFY by measurement)
+  usable_fraction: 0.80
+  esc_continuous_a: 35.0
+  esc_efficiency: 0.92
+  avionics_w: 2.5         # FC + receiver + flow (neuroflight-fc hw/DESIGN.md §3: ~0.4 A at 5 V)
+
+motor:   # 1404 4600KV class (typical published figures, VERIFY on the thrust stand)
+  kv_rpm_per_v: 4600
+  rm_ohm: 0.20
+  i0_a: 0.6               # no-load current at 10 V
+  i0_ref_v: 10.0
+  rotor_inertia_kgm2: 1.6e-7   # bell + magnets
+  max_current_a: 18.0
+
+propeller:  # Gemfan D76-class 3" tri-blade, static coefficients (n in rev/s, D in m)
+  ct: 0.160               # T = ct * rho * n^2 * D^4  (high-pitch tri-blade estimate, VERIFY on thrust stand)
+  cp: 0.110               # P = cp * rho * n^3 * D^5  (figure of merit ~0.46, typical for 3in props)
+  duct_thrust_gain: 1.10  # static thrust gain from the duct (conservative; literature 1.1-1.4)
+  inertia_kgm2: 2.2e-7
+
+environment:
+  rho: 1.225
+  g: 9.81
+
+# Propulsion numbers are estimates until the M3 thrust stand. The checks are
+# run on the nominal set AND on this pessimistic corner; both must pass.
+pessimistic:
+  ct_scale: 0.85
+  cp_scale: 1.20
+  mass_scale: 1.05
+
+requirements:   # pass/fail limits checked by `make verify`
+  max_auw_g: 249.0              # sub-250 g class
+  min_thrust_to_weight: 3.0
+  max_hover_throttle: 0.45
+  min_hover_time_min: 4.0
+  max_cog_offset_xy_mm: 2.0
+  min_safety_factor_crash: 1.5  # plate stress vs allowable under the crash load case below
+  min_safety_factor_thrust: 4.0 # plate stress vs allowable at full thrust on all motors
+  min_mode_separation: 0.20     # first frame mode at least 20 % away from the hover rotor frequency
+  crash_load_g: 20.0            # whole vehicle landing on ONE foot at 20 g (hard drop)
+  max_esc_current_fraction: 0.85
