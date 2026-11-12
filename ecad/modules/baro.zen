@@ -1,0 +1,39 @@
+"""DPS310 barometer (U4) on I2C1, address 0x76 (SDO low).
+
+VERIFY: the Infineon datasheet was not reachable from the build container. The
+pinout (1 GND, 2 CSB, 3 SDI, 4 SCK, 5 SDO, 6 VDDIO, 7 GND, 8 VDD), CSB high for
+I2C, SDO low for 0x76, and 100 nF per supply pin all come from secondary sources
+(atopile infineon-dps310 package, hw/pinmap.csv notes).
+"""
+
+load("@stdlib/interfaces.zen", "I2c")
+load("./parts.zen", "C_100N", "R_4K7")
+
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+
+V3V3_D = io(Power(voltage="1.7V to 3.6V"))
+GND = io(Ground)
+I2C = io(I2c)
+
+Component(
+    name="U4",
+    symbol=Symbol(library="../lib/symbols/DPS310.kicad_sym"),
+    footprint=File("../lib/footprints/Bosch_LGA-8_2x2.5mm_P0.65mm_ClockwisePinNumbering.kicad_mod"),
+    part=Part(mpn="DPS310XTSA1", manufacturer="Infineon"),
+    pins={
+        "VDD": V3V3_D,
+        "VDDIO": V3V3_D,
+        "GND": GND,
+        "SCK": I2C.SCL,
+        "SDI": I2C.SDA,
+        "SDO": GND,
+        "CSB": V3V3_D,
+    },
+)
+Capacitor(name="C_U4_VDD", P1=V3V3_D, P2=GND, **C_100N)
+Capacitor(name="C_U4_VDDIO", P1=V3V3_D, P2=GND, **C_100N)
+
+# hw/pinmap.csv: 4k7 pull-ups to 3V3_D
+Resistor(name="R_SCL", P1=I2C.SCL, P2=V3V3_D, **R_4K7)
+Resistor(name="R_SDA", P1=I2C.SDA, P2=V3V3_D, **R_4K7)

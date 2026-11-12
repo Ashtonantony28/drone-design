@@ -1,0 +1,193 @@
+"""Connectors J1-J7 (DESIGN.md section 6) with their series and ESD parts.
+
+J2 pin order is the "Betaflight 4-in-1" one: VBAT, GND, CUR, TLM, M1..M4.
+VERIFY against the ESC actually bought before first power-up (DESIGN.md).
+Motor nets: MOTOR0-3 are the motor indices of docs/INTERFACES.md section 2 and
+go to ESC M1-M4 in order.
+"""
+
+load("@stdlib/interfaces.zen", "I2c", "Swd", "Uart", "Usb2")
+load("./parts.zen", "C_100N", "R_100R", "R_2K2", "R_33R", "R_5K1")
+
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+
+VBAT = io(Power(voltage="6V to 25.2V"), direction="output")
+VBUS = io(Power(voltage="4.4V to 5.5V"), direction="output")
+V5 = io(Power(voltage="3.8V to 5.5V"))
+V3V3_D = io(Power(voltage="3.0V to 3.6V"))
+GND = io(Ground)
+
+USB = io(Usb2)
+MOTOR0 = io(Net)
+MOTOR1 = io(Net)
+MOTOR2 = io(Net)
+MOTOR3 = io(Net)
+ESC_M1 = io(Net)
+ESC_CUR = io(Net)
+ESC_TLM = io(Net)
+RC = io(Uart)
+FLOW = io(Uart)
+AUX = io(Uart)
+AUX_I2C = io(I2c)
+SWD = io(Swd)
+SWO = io(Net)
+NRST = io(Net)
+
+ESC_M2 = Net()
+ESC_M3 = Net()
+ESC_M4 = Net()
+USB_CC1 = Net()
+USB_CC2 = Net()
+
+# --- J1 USB-C (USB 2.0 device) ---
+Component(
+    name="J1",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/USB_C_Receptacle_USB2.0_16P.kicad_sym"),
+    footprint=File("../lib/footprints/USB_C_Receptacle_HRO_TYPE-C-31-M-12.kicad_mod"),
+    part=Part(mpn="TYPE-C-31-M-12", manufacturer="Korean Hroparts"),
+    pins={
+        "VBUS": VBUS,
+        "GND": GND,
+        "SHIELD": GND,  # DESIGN.md section 5.8: direct to GND
+        "CC1": USB_CC1,
+        "CC2": USB_CC2,
+        "D+": USB.D.P,
+        "D-": USB.D.N,
+        "SBU1": NotConnected(),
+        "SBU2": NotConnected(),
+    },
+)
+# USB Type-C sink: Rd = 5.1k on each CC pin
+Resistor(name="R_CC1", P1=USB_CC1, P2=GND, **R_5K1)
+Resistor(name="R_CC2", P1=USB_CC2, P2=GND, **R_5K1)
+
+# U9 USBLC6-2SC6 at the connector; each line uses both of its pins (1/6, 3/4)
+Component(
+    name="U9",
+    symbol=Symbol(library="../lib/symbols/USBLC6-2SC6.kicad_sym", name="USBLC6-2SC6"),
+    footprint=File("../lib/footprints/SOT-23-6.kicad_mod"),
+    part=Part(mpn="USBLC6-2SC6", manufacturer="STMicroelectronics"),
+    pins={"I/O1": USB.D.P, "I/O2": USB.D.N, "VBUS": VBUS, "GND": GND},
+)
+Capacitor(name="C_U9", P1=VBUS, P2=GND, **C_100N)
+
+# --- J2 ESC, JST-SH 8 ---
+Component(
+    name="J2",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/Conn_01x08_MountingPin.kicad_sym"),
+    footprint=File("../lib/footprints/JST_SH_SM08B-SRSS-TB_1x08-1MP_P1.00mm_Horizontal.kicad_mod"),
+    part=Part(mpn="SM08B-SRSS-TB(LF)(SN)", manufacturer="JST"),
+    pins={
+        "Pin_1": VBAT,
+        "Pin_2": GND,
+        "Pin_3": ESC_CUR,
+        "Pin_4": ESC_TLM,
+        "Pin_5": ESC_M1,
+        "Pin_6": ESC_M2,
+        "Pin_7": ESC_M3,
+        "Pin_8": ESC_M4,
+        "MountPin": GND,
+    },
+)
+# DESIGN.md section 5.5: 33 ohm series at the MCU end, nothing else on the line
+Resistor(name="R_M1", P1=MOTOR0, P2=ESC_M1, **R_33R)
+Resistor(name="R_M2", P1=MOTOR1, P2=ESC_M2, **R_33R)
+Resistor(name="R_M3", P1=MOTOR2, P2=ESC_M3, **R_33R)
+Resistor(name="R_M4", P1=MOTOR3, P2=ESC_M4, **R_33R)
+
+
+# DESIGN.md section 5.9: 100 ohm series on every external UART line
+def _uart_series(prefix, uart):
+    tx = Net(prefix + "_TX_CONN")
+    rx = Net(prefix + "_RX_CONN")
+    Resistor(name="R_" + prefix + "_TX", P1=uart.TX, P2=tx, **R_100R)
+    Resistor(name="R_" + prefix + "_RX", P1=uart.RX, P2=rx, **R_100R)
+    return tx, rx
+
+
+_rc_tx, _rc_rx = _uart_series("RC", RC)
+_flow_tx, _flow_rx = _uart_series("FLOW", FLOW)
+_aux_tx, _aux_rx = _uart_series("AUX", AUX)
+
+# --- J3 receiver / J4 flow: 5V, GND, FC TX, FC RX ---
+Component(
+    name="J3",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/Conn_01x04_MountingPin.kicad_sym"),
+    footprint=File("../lib/footprints/JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal.kicad_mod"),
+    part=Part(mpn="SM04B-SRSS-TB(LF)(SN)", manufacturer="JST"),
+    pins={"Pin_1": V5, "Pin_2": GND, "Pin_3": _rc_tx, "Pin_4": _rc_rx, "MountPin": GND},
+)
+Component(
+    name="J4",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/Conn_01x04_MountingPin.kicad_sym"),
+    footprint=File("../lib/footprints/JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal.kicad_mod"),
+    part=Part(mpn="SM04B-SRSS-TB(LF)(SN)", manufacturer="JST"),
+    pins={"Pin_1": V5, "Pin_2": GND, "Pin_3": _flow_tx, "Pin_4": _flow_rx, "MountPin": GND},
+)
+
+# --- J5 aux: 5V, GND, TX6, RX6, SCL2, SDA2 ---
+Component(
+    name="J5",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/Conn_01x06_MountingPin.kicad_sym"),
+    footprint=File("../lib/footprints/JST_SH_SM06B-SRSS-TB_1x06-1MP_P1.00mm_Horizontal.kicad_mod"),
+    part=Part(mpn="SM06B-SRSS-TB(LF)(SN)", manufacturer="JST"),
+    pins={
+        "Pin_1": V5,
+        "Pin_2": GND,
+        "Pin_3": _aux_tx,
+        "Pin_4": _aux_rx,
+        "Pin_5": AUX_I2C.SCL,
+        "Pin_6": AUX_I2C.SDA,
+        "MountPin": GND,
+    },
+)
+# hw/pinmap.csv: 2k2 pull-ups on I2C2
+Resistor(name="R_AUX_SCL", P1=AUX_I2C.SCL, P2=V3V3_D, **R_2K2)
+Resistor(name="R_AUX_SDA", P1=AUX_I2C.SDA, P2=V3V3_D, **R_2K2)
+
+# --- J6 SWD, Tag-Connect TC2030-NL (footprint only, no part) ---
+# 1 VCC, 2 SWDIO, 3 nRESET, 4 SWCLK, 5 GND, 6 SWO (KiCad library symbol)
+Component(
+    name="J6",
+    prefix="J",
+    symbol=Symbol(
+        library="../lib/symbols/Conn_ARM_SWD_TagConnect_TC2030-NL.kicad_sym",
+        name="Conn_ARM_SWD_TagConnect_TC2030-NL",
+    ),
+    footprint=File("../lib/footprints/Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical.kicad_mod"),
+    pins={
+        "VCC": V3V3_D,
+        "SWDIO": SWD.SWDIO,
+        "~{RESET}": NRST,
+        "SWCLK": SWD.SWCLK,
+        "GND": GND,
+        "SWO": SWO,
+    },
+    skip_bom=True,
+)
+
+# --- J7 SWD alternative, 1.27 mm 2x5 Cortex-Debug header (DNP) ---
+Component(
+    name="J7",
+    prefix="J",
+    symbol=Symbol(library="../lib/symbols/Conn_ARM_JTAG_SWD_10.kicad_sym"),
+    footprint=File("../lib/footprints/PinHeader_2x05_P1.27mm_Vertical_SMD.kicad_mod"),
+    part=Part(mpn="FTSH-105-01-F-DV-K", manufacturer="Samtec"),
+    pins={
+        "VTref": V3V3_D,
+        "SWDIO/TMS": SWD.SWDIO,
+        "SWCLK/TCK": SWD.SWCLK,
+        "SWO/TDO": SWO,
+        "NC/TDI": NotConnected(),
+        "GND": GND,
+        "GNDDetect": GND,
+        "~{RESET}": NRST,
+    },
+    dnp=True,
+)

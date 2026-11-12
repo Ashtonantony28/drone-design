@@ -1,0 +1,236 @@
+"""neuroflight-fc v1 flight controller: 36 x 36 mm, 4 layers, 30.5 mm mounting.
+
+Source of truth: neuroflight-fc/hw/DESIGN.md, hw/pinmap.csv, hw/bom.csv.
+Verify: `pcb build boards/nf_fc/nf_fc.zen` and `pytest check_design.py` from ecad/.
+"""
+
+load("@stdlib/interfaces.zen", "DiffPair", "I2c", "Qspi", "Spi", "Swd", "Uart", "Usb2")
+load("../../modules/parts.zen", "TEST_PAD")
+
+PowerTree = Module("../../modules/power.zen")
+Mcu = Module("../../modules/mcu.zen")
+ImuIsland = Module("../../modules/imu.zen")
+Baro = Module("../../modules/baro.zen")
+Flash = Module("../../modules/flash.zen")
+Sense = Module("../../modules/sense.zen")
+Connectors = Module("../../modules/connectors.zen")
+Ui = Module("../../modules/ui.zen")
+Fpga = Module("../../modules/fpga.zen")
+TestPoint = Module("@stdlib/generics/TestPoint.zen")
+
+# --- rails (DESIGN.md section 3) ---
+GND = Ground("GND")
+# 2S-6S at the ESC connector; spikes above this are clamped by the TVS
+VBAT = Power("VBAT", voltage="6V to 25.2V")
+# USB 2.0 VBUS at a bus-powered device
+VBUS = Power("VBUS", voltage="4.4V to 5.5V")
+# Buck gives 4.87-5.18 V over VFB and divider tolerance; on USB alone the rail is
+# VBUS minus the Schottky drop
+V5 = Power("5V", voltage="3.9V to 5.2V (5V)")
+V3V3_D = Power("3V3_D", voltage="3.2V to 3.4V (3.3V)")
+V3V3_IMU = Power("3V3_IMU", voltage="3.2V to 3.4V (3.3V)")
+V1V2_FPGA = Power("1V2_FPGA", voltage="1.16V to 1.24V (1.2V)")
+VDDA = Power("VDDA", voltage="3.2V to 3.4V (3.3V)")
+
+# --- signals; names are the `net` column of hw/pinmap.csv ---
+IMUA = Spi(CS=Net("IMUA_CS"), CLK=Net("IMUA_SCK"), MISO=Net("IMUA_MISO"), MOSI=Net("IMUA_MOSI"))
+IMUA_INT1 = Net()
+IMUB = Spi(CS=Net("IMUB_CS"), CLK=Net("IMUB_SCK"), MISO=Net("IMUB_MISO"), MOSI=Net("IMUB_MOSI"))
+IMUB_INT1 = Net()
+BARO = I2c(SCL=Net("BARO_SCL"), SDA=Net("BARO_SDA"))
+FLASH = Qspi(
+    CS=Net("QSPI_NCS"),
+    CLK=Net("QSPI_CLK"),
+    IO0=Net("QSPI_IO0"),
+    IO1=Net("QSPI_IO1"),
+    IO2=Net("QSPI_IO2"),
+    IO3=Net("QSPI_IO3"),
+)
+AUX_I2C = I2c(SCL=Net("AUX_SCL"), SDA=Net("AUX_SDA"))
+# UART nets are named from the FC side: *_TX is driven by the MCU
+RC = Uart(TX=Net("RX_TX"), RX=Net("RX_RX"))
+FLOW = Uart(TX=Net("FLOW_TX"), RX=Net("FLOW_RX"))
+AUX = Uart(TX=Net("AUX_TX"), RX=Net("AUX_RX"))
+FPGA = Spi(CS=Net("FPGA_SS_B"), CLK=Net("FPGA_SCK"), MISO=Net("FPGA_MISO"), MOSI=Net("FPGA_MOSI"))
+FPGA_CRESET_B = Net()
+FPGA_CDONE = Net()
+FPGA_IRQ = Net()
+# pinmap USB_DP / USB_DM; named _P/_N so KiCad pairs them (90 ohm differential)
+USB = Usb2(D=DiffPair(P=Net("USB_P"), N=Net("USB_N")))
+SWD = Swd(SWDIO=Net("SWDIO"), SWCLK=Net("SWCLK"))
+SWO = Net()
+NRST = Net()
+BOOT0 = Net()
+MOTOR0 = Net()
+MOTOR1 = Net()
+MOTOR2 = Net()
+MOTOR3 = Net()
+ESC_M1 = Net()
+ESC_CUR = Net()
+ESC_TLM = Net()
+VBAT_SENSE = Net()
+CURR_SENSE = Net()
+V5_SENSE = Net("5V_SENSE")
+VBUS_SENSE = Net()
+LED0 = Net()
+LED1 = Net()
+BEEPER = Net()
+LED_STRIP = Net()
+
+PowerTree(
+    name="PWR",
+    VBAT=VBAT,
+    VBUS=VBUS,
+    V5=V5,
+    V3V3_D=V3V3_D,
+    V3V3_IMU=V3V3_IMU,
+    V1V2_FPGA=V1V2_FPGA,
+    GND=GND,
+)
+
+Mcu(
+    name="MCU",
+    V3V3_D=V3V3_D,
+    VDDA=VDDA,
+    GND=GND,
+    IMUA=IMUA,
+    IMUA_INT1=IMUA_INT1,
+    IMUB=IMUB,
+    IMUB_INT1=IMUB_INT1,
+    BARO=BARO,
+    FLASH=FLASH,
+    AUX_I2C=AUX_I2C,
+    RC=RC,
+    FLOW=FLOW,
+    AUX=AUX,
+    ESC_TLM=ESC_TLM,
+    MOTOR0=MOTOR0,
+    MOTOR1=MOTOR1,
+    MOTOR2=MOTOR2,
+    MOTOR3=MOTOR3,
+    FPGA=FPGA,
+    FPGA_CRESET_B=FPGA_CRESET_B,
+    FPGA_CDONE=FPGA_CDONE,
+    FPGA_IRQ=FPGA_IRQ,
+    VBAT_SENSE=VBAT_SENSE,
+    CURR_SENSE=CURR_SENSE,
+    V5_SENSE=V5_SENSE,
+    VBUS_SENSE=VBUS_SENSE,
+    USB=USB,
+    SWD=SWD,
+    SWO=SWO,
+    NRST=NRST,
+    BOOT0=BOOT0,
+    LED0=LED0,
+    LED1=LED1,
+    BEEPER=BEEPER,
+    LED_STRIP=LED_STRIP,
+)
+
+ImuIsland(
+    name="IMU",
+    V3V3_IMU=V3V3_IMU,
+    GND=GND,
+    IMUA=IMUA,
+    IMUA_INT1=IMUA_INT1,
+    IMUB=IMUB,
+    IMUB_INT1=IMUB_INT1,
+)
+
+Baro(name="BARO", V3V3_D=V3V3_D, GND=GND, I2C=BARO)
+Flash(name="FLASH", V3V3_D=V3V3_D, GND=GND, QSPI=FLASH)
+
+Sense(
+    name="SENSE",
+    VBAT=VBAT,
+    V5=V5,
+    VBUS=VBUS,
+    GND=GND,
+    ESC_CUR=ESC_CUR,
+    VBAT_SENSE=VBAT_SENSE,
+    CURR_SENSE=CURR_SENSE,
+    V5_SENSE=V5_SENSE,
+    VBUS_SENSE=VBUS_SENSE,
+)
+
+Connectors(
+    name="CONN",
+    VBAT=VBAT,
+    VBUS=VBUS,
+    V5=V5,
+    V3V3_D=V3V3_D,
+    GND=GND,
+    USB=USB,
+    MOTOR0=MOTOR0,
+    MOTOR1=MOTOR1,
+    MOTOR2=MOTOR2,
+    MOTOR3=MOTOR3,
+    ESC_M1=ESC_M1,
+    ESC_CUR=ESC_CUR,
+    ESC_TLM=ESC_TLM,
+    RC=RC,
+    FLOW=FLOW,
+    AUX=AUX,
+    AUX_I2C=AUX_I2C,
+    SWD=SWD,
+    SWO=SWO,
+    NRST=NRST,
+)
+
+Ui(
+    name="UI",
+    V5=V5,
+    V3V3_D=V3V3_D,
+    GND=GND,
+    LED0=LED0,
+    LED1=LED1,
+    BEEPER=BEEPER,
+    LED_STRIP=LED_STRIP,
+)
+
+# U10 and its decoupling are not populated on v1 (U11 is DNP inside PowerTree)
+Fpga(
+    name="FPGA",
+    V3V3_D=V3V3_D,
+    V1V2=V1V2_FPGA,
+    GND=GND,
+    SPI=FPGA,
+    CRESET_B=FPGA_CRESET_B,
+    CDONE=FPGA_CDONE,
+    IRQ=FPGA_IRQ,
+    dnp=True,
+)
+
+# --- test points (DESIGN.md section 8); TP8 (buck SW) lives in PowerTree ---
+_test_points = {
+    "TP1": VBAT,
+    "TP2": V5,
+    "TP3": V3V3_D,
+    "TP4": V3V3_IMU,
+    "TP5": V1V2_FPGA,
+    "TP6": VDDA,
+    "TP7A": GND,
+    "TP7B": GND,
+    "TP9": VBAT_SENSE,
+    "TP10": ESC_M1,
+    "TP11": IMUA_INT1,
+    "TP12": IMUB_INT1,
+    "TP13": NRST,
+    "TP14": BOOT0,
+}
+for _name, _net in _test_points.items():
+    TestPoint(name=_name, variant=TEST_PAD, P1=_net)
+
+# --- mounting: 4 x 4.0 mm NPTH for M3 grommets on a 30.5 mm square ---
+for _i in range(4):
+    Component(
+        name="H{}".format(_i + 1),
+        prefix="H",
+        symbol=Symbol(library="../../lib/symbols/MountingHole.kicad_sym"),
+        footprint=File("../../lib/footprints/MountingHole_4.0mm_M3_Grommet.kicad_mod"),
+        pins={},
+        skip_bom=True,
+        skip_pos=True,
+    )
+
+Board(name="nf_fc", layers=4, layout_path="layout/nf_fc")

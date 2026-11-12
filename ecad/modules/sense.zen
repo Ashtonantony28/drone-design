@@ -1,0 +1,85 @@
+"""ADC and GPIO sense networks (hw/pinmap.csv POWER_SENSE and USB rows)."""
+
+load("@stdlib/units.zen", "Resistance", "Voltage")
+load("./parts.zen", "C_100N", "R_10K", "R_1K", "R_20K")
+
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+
+VBAT = io(Power(voltage="6V to 25.2V"))
+V5 = io(Power(voltage="0V to 5.5V"))
+VBUS = io(Power(voltage="4.4V to 5.5V"))
+GND = io(Ground)
+ESC_CUR = io(Net)
+VBAT_SENSE = io(Net)
+CURR_SENSE = io(Net)
+V5_SENSE = io(Net)
+VBUS_SENSE = io(Net)
+
+# Input surge the VBAT divider sees: clamp voltage of the TVS in power.zen
+vbat_clamp = config(Voltage, default="42.1V", help="TVS clamping voltage on VBAT")
+
+# Lowest VDDA the ADC reference can sit at (3V3_D LDO, -3 %)
+ADC_VREF_MIN = Voltage("3.2V")
+# DS12110 rev 7 Table 59 "I/O static characteristics": VIH = 0.7 * VDD, taken at
+# the highest VDD (3.4 V).
+GPIO_VIH = Voltage("2.38V")
+# DS12110 rev 7 Table 23 "General operating conditions": FT I/O input voltage up
+# to Min(VDD, VDDA) + 3.6 V, below 5.5 V. PC0 (FT_a) and PA9 (FT_u) are FT pins.
+FT_VIN_MAX = Voltage("5.5V")
+# Same table: TT I/O (PC5 is TT_a) up to VDD + 0.3 V, taken at the lowest VDD.
+TT_VIN_MAX = Voltage("3.5V")
+
+
+def divider_out(v_in, r_top, r_bot):
+    # Unloaded resistive divider: VOUT = VIN * RBOT / (RTOP + RBOT)
+    return v_in * r_bot / (r_top + r_bot)
+
+
+def divider_worst_case_max(v_in_max, r_top, r_bot):
+    return divider_out(v_in_max, r_top.min, r_bot.max)
+
+
+def divider_worst_case_min(v_in_min, r_top, r_bot):
+    return divider_out(v_in_min, r_top.max, r_bot.min)
+
+
+_r10k = Resistance(R_10K["value"])
+_r1k = Resistance(R_1K["value"])
+_r20k = Resistance(R_20K["value"])
+
+# VBAT: 10k / 1k, scale 11. PC0 must stay under the ADC reference at a full 6S pack.
+_vbat_adc = divider_worst_case_max(VBAT.voltage.max, _r10k, _r1k)
+check(
+    _vbat_adc < ADC_VREF_MIN.nominal and _vbat_adc < 3.3,
+    "VBAT_SENSE reaches {} V at VBAT = {}".format(_vbat_adc, VBAT.voltage),
+)
+check(
+    divider_worst_case_max(vbat_clamp.nominal, _r10k, _r1k) <= FT_VIN_MAX.nominal,
+    "VBAT_SENSE exceeds the FT pin limit while the TVS is clamping",
+)
+check(abs((_r10k.nominal + _r1k.nominal) / _r1k.nominal - 11) < 1e-9, "VBAT divider scale must be 11")
+Resistor(name="R_VBAT_TOP", P1=VBAT, P2=VBAT_SENSE, **R_10K)
+Resistor(name="R_VBAT_BOT", P1=VBAT_SENSE, P2=GND, **R_1K)
+
+# 5V: 10k / 10k
+_v5_adc = divider_worst_case_max(V5.voltage.max, _r10k, _r10k)
+check(
+    _v5_adc < ADC_VREF_MIN.nominal and _v5_adc <= TT_VIN_MAX.nominal,
+    "5V_SENSE reaches {} V".format(_v5_adc),
+)
+Resistor(name="R_5V_TOP", P1=V5, P2=V5_SENSE, **R_10K)
+Resistor(name="R_5V_BOT", P1=V5_SENSE, P2=GND, **R_10K)
+
+# VBUS detect on PA9 (digital): 10k on top, 20k below. Must read high at the
+# lowest VBUS and stay inside the pin limit at the highest.
+_vbus_hi = divider_worst_case_max(VBUS.voltage.max, _r10k, _r20k)
+_vbus_lo = divider_worst_case_min(VBUS.voltage.min, _r10k, _r20k)
+check(_vbus_hi <= FT_VIN_MAX.nominal, "VBUS_SENSE reaches {} V".format(_vbus_hi))
+check(_vbus_lo >= GPIO_VIH.nominal, "VBUS_SENSE is only {} V at minimum VBUS, below VIH".format(_vbus_lo))
+Resistor(name="R_VBUS_TOP", P1=VBUS, P2=VBUS_SENSE, **R_10K)
+Resistor(name="R_VBUS_BOT", P1=VBUS_SENSE, P2=GND, **R_20K)
+
+# ESC current signal: 1k + 100 nF low-pass, fc = 1 / (2 pi R C) = 1.6 kHz
+Resistor(name="R_CUR", P1=ESC_CUR, P2=CURR_SENSE, **R_1K)
+Capacitor(name="C_CUR", P1=CURR_SENSE, P2=GND, **C_100N)

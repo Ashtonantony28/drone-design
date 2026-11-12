@@ -1,0 +1,39 @@
+"""One physical part whose reference designator follows the instance name.
+
+`pcb` allocates designators itself and only honours a refdes-like name on a
+module instance, not on a bare Component(). Instantiating a part through this
+wrapper (`Placed(name="U6", ...)`) therefore keeps the designators of
+neuroflight-fc/hw/bom.csv and DESIGN.md (U1-U11, J1-J7, D1-D3, ...), which the
+bring-up checklist and silkscreen refer to.
+
+Pins are passed as `pins={"<symbol pin name>": net}` through the `P` io dict:
+every symbol pin name in `pin_names` becomes one io.
+"""
+
+# Defaults describe SW1 only so that the file evaluates on its own; every real
+# instance passes all of them.
+symbol = config(str, default="SW_Push", help="Symbol file under ecad/lib/symbols, without extension")
+symbol_name = config(str, optional=True, help="Symbol name when the file holds more than one")
+footprint = config(str, default="SW_SPST_TS-1088-xR020", help="Footprint file under ecad/lib/footprints, without extension")
+prefix = config(str, default="U")
+mpn = config(str, optional=True)
+manufacturer = config(str, optional=True)
+value = config(str, optional=True)
+kind = config(str, optional=True, help="Component type, e.g. inductor")
+in_bom = config(bool, default=True)
+pin_names = config(str, default="1|2", help="Symbol pin names, separated by '|'")
+
+_names = pin_names.split("|")
+_pins = {n: io("P" + str(i), Net) for i, n in enumerate(_names)}
+
+Component(
+    name="X",
+    prefix=prefix,
+    symbol=Symbol(library="../lib/symbols/" + symbol + ".kicad_sym", name=symbol_name) if symbol_name else Symbol(library="../lib/symbols/" + symbol + ".kicad_sym"),
+    footprint=File("../lib/footprints/" + footprint + ".kicad_mod"),
+    part=Part(mpn=mpn, manufacturer=manufacturer) if mpn and manufacturer else None,
+    properties={"value": value} if value else {},
+    type=kind,
+    pins=_pins,
+    skip_bom=not in_bom,
+)

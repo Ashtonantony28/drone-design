@@ -1,0 +1,3 @@
+Symbols and footprints here are copied or derived from the KiCad libraries
+(https://gitlab.com/kicad/libraries), licensed CC-BY-SA 4.0 with the KiCad library
+exception. See build_lib.py for the source of each file.

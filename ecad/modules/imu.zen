@@ -1,0 +1,84 @@
+"""IMU island (DESIGN.md section 4): ICM-42688-P (U2, SPI1) and BMI270 (U3, SPI2).
+
+Everything here runs from 3V3_IMU only.
+Pinouts and decoupling: TDK DS-000347 rev 1.2 (Table 9, Figure 5 SPI circuit:
+C1 0.1 uF + C2 2.2 uF on VDD, C3 10 nF on VDDIO) and Bosch BST-BMI270-DS000-06
+(Table 22, section 7.2: 100 nF on VDD and on VDDIO).
+"""
+
+load("@stdlib/interfaces.zen", "Spi")
+load("./parts.zen", "C_100N", "C_10N", "C_2U2", "R_0R", "R_10K", "TEST_PAD")
+
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+TestPoint = Module("@stdlib/generics/TestPoint.zen")
+
+# ICM-42688-P VDD/VDDIO 1.71-3.6 V, BMI270 VDD 1.71-3.6 V
+V3V3_IMU = io(Power(voltage="1.71V to 3.6V"))
+GND = io(Ground)
+IMUA = io(Spi)
+IMUA_INT1 = io(Net)
+IMUB = io(Spi)
+IMUB_INT1 = io(Net)
+
+IMUA_SCK_R = Net()
+IMUB_SCK_R = Net()
+IMUA_CLKIN = Net()
+
+# DESIGN.md section 5.6: 22 ohm pads in the SCK lines, fitted with 0 ohm first.
+Resistor(name="R_IMUA_SCK", P1=IMUA.CLK, P2=IMUA_SCK_R, **R_0R)
+Resistor(name="R_IMUB_SCK", P1=IMUB.CLK, P2=IMUB_SCK_R, **R_0R)
+
+# hw/pinmap.csv: 10k pull-up on IMU A chip select to 3V3_IMU
+Resistor(name="R_IMUA_CS", P1=IMUA.CS, P2=V3V3_IMU, **R_10K)
+
+Component(
+    name="U2",
+    symbol=Symbol(library="../lib/symbols/ICM-42688-P.kicad_sym"),
+    footprint=File("../lib/footprints/Bosch_LGA-14_3x2.5mm_P0.5mm.kicad_mod"),
+    part=Part(mpn="ICM-42688-P", manufacturer="TDK InvenSense"),
+    pins={
+        "VDD": V3V3_IMU,
+        "VDDIO": V3V3_IMU,
+        "GND": GND,
+        "AP_CS": IMUA.CS,
+        "AP_SCL/AP_SCLK": IMUA_SCK_R,
+        "AP_SDA/AP_SDIO/AP_SDI": IMUA.MOSI,
+        "AP_SDO/AP_AD0": IMUA.MISO,
+        "INT1/INT": IMUA_INT1,
+        # Pin 9 resets to INT2 (unused). Brought to a pad so a later revision can
+        # feed a 32 kHz CLKIN (DESIGN.md section 4).
+        "INT2/FSYNC/CLKIN": IMUA_CLKIN,
+    },
+)
+Capacitor(name="C_U2_VDD_100N", P1=V3V3_IMU, P2=GND, **C_100N)
+Capacitor(name="C_U2_VDD_2U2", P1=V3V3_IMU, P2=GND, **C_2U2)
+Capacitor(name="C_U2_VDDIO", P1=V3V3_IMU, P2=GND, **C_10N)
+TestPoint(name="TP_IMUA_CLKIN", variant=TEST_PAD, P1=IMUA_CLKIN)
+
+Component(
+    name="U3",
+    symbol=Symbol(library="../lib/symbols/BMI270.kicad_sym"),
+    footprint=File("../lib/footprints/Bosch_LGA-14_3x2.5mm_P0.5mm.kicad_mod"),
+    part=Part(mpn="BMI270", manufacturer="Bosch Sensortec"),
+    pins={
+        "VDD": V3V3_IMU,
+        "VDDIO": V3V3_IMU,
+        "GND": GND,
+        "GNDIO": GND,
+        "CSB": IMUB.CS,
+        "SCx": IMUB_SCK_R,
+        "SDx": IMUB.MOSI,
+        "SDO": IMUB.MISO,
+        "INT1": IMUB_INT1,
+        # Table 22: unused INT2 "do not connect"; ASDx/ASCx "VDDIO or DNC, not GND";
+        # OCSB/OSDO DNC.
+        "INT2": NotConnected(),
+        "ASDx": NotConnected(),
+        "ASCx": NotConnected(),
+        "OCSB": NotConnected(),
+        "OSDO": NotConnected(),
+    },
+)
+Capacitor(name="C_U3_VDD", P1=V3V3_IMU, P2=GND, **C_100N)
+Capacitor(name="C_U3_VDDIO", P1=V3V3_IMU, P2=GND, **C_100N)
