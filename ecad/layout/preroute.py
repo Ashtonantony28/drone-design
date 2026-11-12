@@ -499,11 +499,40 @@ class Router:
                             break
                     if not hit:
                         self.log.append("no edge stitching via near %s=%.1f on the %s%s edge" % ("xy"[1 - axis], u, "-+"[sign > 0], "xy"[axis]))
+        # close the gaps the nominal positions left (connectors and test pads at the edge)
+        span_lim = HOLE_XY - HOLE_KEEPOUT_R
+        for axis in (0, 1):
+            for sign in (-1, 1):
+                for _ in range(6):
+                    along = sorted(v["at"][1 - axis] for v in self.vias if v["net"] == "GND" and abs(v["at"][axis] - sign * BOARD / 2) <= 1.5
+                                   and abs(v["at"][1 - axis]) <= span_lim)
+                    pts = [-span_lim] + along + [span_lim]
+                    gap = max(zip(pts, pts[1:]), key=lambda ab: ab[1] - ab[0])
+                    if gap[1] - gap[0] <= STITCH_PITCH + 0.5:
+                        break
+                    mid = (gap[0] + gap[1]) / 2
+                    cands = []
+                    for i in range(int((gap[1] - gap[0] - 1.0) / 0.1) + 1):
+                        u = gap[0] + 0.5 + 0.1 * i
+                        for inset in (-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6):
+                            c = [0.0, 0.0]
+                            c[axis] = sign * (lim - inset)
+                            c[1 - axis] = u
+                            cands.append((abs(u - mid), abs(inset), tuple(c)))
+                    for _, _, c in sorted(cands):
+                        if self.via_ok(c, "GND"):
+                            self.add_via(c, "GND")
+                            self.vias[-1]["stitch"] = True
+                            placed += 1
+                            break
+                    else:
+                        self.log.append("edge stitching gap of %.1f mm on the %s%s edge stays" % (gap[1] - gap[0], "-+"[sign > 0], "xy"[axis]))
+                        break
         # ring around the buck converter
         cy = self.fp[BUCK]["courtyard"]
         ring = (cy[0] - 0.5, cy[1] - 0.5, cy[2] + 0.5, cy[3] + 0.5)
         per = []
-        steps = 6
+        steps = 8
         ly = self.fp[INDUCTOR]["at"][1]
         for i in range(steps):
             f = (i + 0.5) / steps
@@ -513,7 +542,7 @@ class Router:
                     (ring[0], ring[1] + f * (ring[3] - ring[1])), (ring[2], ring[1] + f * (ring[3] - ring[1]))]
         near = 0
         for u in per:
-            for dx, dy in sorted(((a * 0.15, b * 0.15) for a in range(-5, 6) for b in range(-5, 6)), key=lambda o: math.hypot(*o)):
+            for dx, dy in sorted(((a * 0.15, b * 0.15) for a in range(-7, 8) for b in range(-7, 8)), key=lambda o: math.hypot(*o)):
                 c = (u[0] + dx, u[1] + dy)
                 if self.via_ok(c, "GND"):
                     self.add_via(c, "GND")

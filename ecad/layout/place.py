@@ -36,8 +36,8 @@ MCU_AT = (2.0, 1.5)
 
 # IMU island, top side (DESIGN.md 4). L3 below it is 3V3_IMU; ISLAND_FEED joins
 # the LP5907 output (bottom side, outside the island) to it.
-ISLAND = (-17.7, -13.0, -9.7, -3.3)  # x0, y0, x1, y1
-ISLAND_FEED = (-9.7, -13.7, -5.9, -8.0)
+ISLAND = (-17.7, -13.0, -9.75, -3.3)  # x0, y0, x1, y1
+ISLAND_FEED = (-9.75, -13.7, -5.9, -8.0)
 ISLAND_RING = 1.0  # keep-out ring around the island
 # VBAT has no L3 pour: every VBAT pad is on L4 in the J2/buck corner and is fed
 # by the L4 pour that layout/route.py adds, which leaves L3 an unbroken 3V3_D
@@ -59,7 +59,7 @@ PARTS = {
     "CONN.R_RC_TX.R": (7.05, -10.25, 90, "F"),
     "CONN.R_RC_RX.R": (5.95, -10.25, 90, "F"),
     # --- SWD Tag-Connect, top-left strip ---
-    "CONN.J6.X": (-6.0, -15.0, 0, "F"),
+    "CONN.J6.X": (-5.35, -15.6, 0, "F"),
     # --- baro, right strip top: away from the IMU island and the USB opening ---
     "BARO.U4.X": (15.0, -8.7, 180, "F"),
     "BARO.C_U4_VDD.C": (15.9, -10.6, 0, "F"),
@@ -111,7 +111,7 @@ PARTS = {
     "FPGA.C_VPP.C": (16.0, -4.2, 0, "F"),
     # ================= bottom side =================
     "CONN.J1.X": (-6.0, 14.7, 180, "B"),
-    "CONN.J2.X": (5.9, 14.55, 180, "B"),
+    "CONN.J2.X": (5.7, 14.55, 180, "B"),
     "CONN.J7.X": (-13.8, 5.0, 90, "B"),
     # --- USB ---
     "CONN.U9.X": (-6.0, 7.2, 90, "B"),
@@ -135,8 +135,8 @@ PARTS = {
     "PWR.U7.X": (-4.3, -3.2, -90, "B"),
     "PWR.C_U7_IN.C": (0.0, -6.0, 90, "B"),
     "PWR.C_U7_OUT.C": (0.2, -1.5, 90, "B"),
-    "SENSE.R_5V_TOP.R": (2.2, -1.6, 90, "B"),
-    "SENSE.R_5V_BOT.R": (3.3, -1.6, 90, "B"),
+    "SENSE.R_5V_TOP.R": (2.2, -1.15, 90, "B"),
+    "SENSE.R_5V_BOT.R": (3.3, -1.15, 90, "B"),
     "SENSE.C_CUR.C": (-0.6, -8.3, 90, "F"),
     # --- IMU LDO, outside the island ---
     "PWR.U8.X": (-6.2, -10.0, 180, "B"),
@@ -155,7 +155,7 @@ PARTS = {
     "FPGA.C_VCC_5.C": (9.6, -12.45, 0, "B"),
     "FPGA.C_VCC_30.C": (11.6, -12.45, 0, "B"),
     "PWR.U11.X": (2.8, -4.9, 0, "B"),
-    "PWR.C_U11_IN.C": (5.85, -5.4, 0, "B"),
+    "PWR.C_U11_IN.C": (1.95, -2.64, 0, "B"),   # under the IN pin
     "PWR.C_U11_OUT.C": (5.85, -4.3, 0, "B"),
     # --- buck, by J2 (DESIGN.md 5.3) ---
     "PWR.U6.X": (8.6, 4.3, 180, "B"),
@@ -181,7 +181,7 @@ PARTS = {
     "TP1.TP": (5.57, 9.9, 0, "B"),  # VBAT
     "TP2.TP": (5.2, 0.2, 0, "B"),  # 5V
     "TP3.TP": (-0.3, 3.0, 0, "B"),  # 3V3_D
-    "TP4.TP": (-10.9, -13.6, 0, "B"),  # 3V3_IMU
+    "TP4.TP": (-10.7, -13.6, 0, "B"),  # 3V3_IMU
     "TP5.TP": (9.6, -14.4, 0, "B"),  # 1V2_FPGA
     "TP6.TP": (-1.2, -16.5, 0, "B"),  # VDDA
     "TP7.TP": (1.9, 1.6, 0, "B"),  # GND near TP2
