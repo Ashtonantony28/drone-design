@@ -1,10 +1,22 @@
 """neuroflight-fc v1 flight controller: 36 x 36 mm, 4 layers, 30.5 mm mounting.
 
 Source of truth: neuroflight-fc/hw/DESIGN.md, hw/pinmap.csv, hw/bom.csv.
-Verify: `pcb build boards/nf_fc/nf_fc.zen` and `pytest check_design.py` from ecad/.
+Verify (from ecad/): `pcb build -D warnings boards/nf_fc/nf_fc.zen` and `pytest -q check_design.py`.
 """
 
+load(
+    "@stdlib/board_config.zen",
+    "BoardConfig",
+    "Constraints",
+    "Copper",
+    "DesignRules",
+    "Holes",
+    "NetClass",
+    "ViaDimension",
+    "Zones",
+)
 load("@stdlib/interfaces.zen", "DiffPair", "I2c", "Qspi", "Spi", "Swd", "Uart", "Usb2")
+load("@stdlib/units.zen", "Impedance")
 load("../../modules/parts.zen", "TEST_PAD")
 
 PowerTree = Module("../../modules/power.zen")
@@ -56,7 +68,7 @@ FPGA_CRESET_B = Net()
 FPGA_CDONE = Net()
 FPGA_IRQ = Net()
 # pinmap USB_DP / USB_DM; named _P/_N so KiCad pairs them (90 ohm differential)
-USB = Usb2(D=DiffPair(P=Net("USB_P"), N=Net("USB_N")))
+USB = Usb2(D=DiffPair(P=Net("USB_P"), N=Net("USB_N"), impedance=Impedance(90)))
 SWD = Swd(SWDIO=Net("SWDIO"), SWCLK=Net("SWCLK"))
 SWO = Net()
 NRST = Net()
@@ -202,6 +214,8 @@ Fpga(
 )
 
 # --- test points (DESIGN.md section 8); TP8 (buck SW) lives in PowerTree ---
+# TP7 is "GND x2": the second pad is TP15. TP16-TP19 are the pads owned by
+# modules (IMU CLKIN, buzzer +/-, LED strip).
 _test_points = {
     "TP1": VBAT,
     "TP2": V5,
@@ -209,8 +223,8 @@ _test_points = {
     "TP4": V3V3_IMU,
     "TP5": V1V2_FPGA,
     "TP6": VDDA,
-    "TP7A": GND,
-    "TP7B": GND,
+    "TP7": GND,
+    "TP15": GND,
     "TP9": VBAT_SENSE,
     "TP10": ESC_M1,
     "TP11": IMUA_INT1,
@@ -233,4 +247,56 @@ for _i in range(4):
         skip_pos=True,
     )
 
-Board(name="nf_fc", layers=4, layout_path="layout/nf_fc")
+# --- fabrication: JLC 4-layer (JLC04161H-7628: 1 oz outer, 0.5 oz inner, 1.6 mm), which is
+# the stdlib 4-layer default stackup. DESIGN.md section 1: 0.1 mm track/space, 0.3 mm
+# drill / 0.45 mm vias, no blind or buried vias.
+JLC_MIN_TRACK = 0.1
+JLC_MIN_SPACE = 0.1
+JLC_VIA = ViaDimension(diameter=0.45, drill=0.3)
+
+Board(
+    name="nf_fc",
+    layers=4,
+    layout_path="layout/nf_fc",
+    via_dimensions=[JLC_VIA],
+    track_widths=[JLC_MIN_TRACK, 0.15, 0.25, 0.5],
+    config=BoardConfig(
+        design_rules=DesignRules(
+            constraints=Constraints(
+                copper=Copper(
+                    minimum_clearance=JLC_MIN_SPACE,
+                    minimum_track_width=JLC_MIN_TRACK,
+                    minimum_via_diameter=JLC_VIA.diameter,
+                    minimum_annular_width=(JLC_VIA.diameter - JLC_VIA.drill) / 2,
+                    copper_to_hole_clearance=0.2,
+                    copper_to_edge_clearance=0.3,
+                ),
+                holes=Holes(minimum_through_hole=JLC_VIA.drill, hole_to_hole_clearance=0.25),
+                zones=Zones(minimum_clearance=0.15),
+            ),
+            netclasses=[
+                NetClass(
+                    name="Default",
+                    clearance=JLC_MIN_SPACE,
+                    track_width=0.15,
+                    via_diameter=JLC_VIA.diameter,
+                    via_drill=JLC_VIA.drill,
+                    diff_pair_width=0.1867,
+                    diff_pair_gap=0.127,
+                ),
+                # stdlib 4-layer GCPW figure for 90 ohm on L1 over the 0.21 mm prepreg
+                NetClass(
+                    name="90Ohm Diff",
+                    clearance=0.15,
+                    track_width=0.1867,
+                    via_diameter=JLC_VIA.diameter,
+                    via_drill=JLC_VIA.drill,
+                    diff_pair_width=0.1867,
+                    diff_pair_gap=0.127,
+                    color="#00C200FF",
+                    differential_pair_impedance=Impedance(90),
+                ),
+            ],
+        ),
+    ),
+)

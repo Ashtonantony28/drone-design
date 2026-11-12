@@ -7,8 +7,9 @@ C1 0.1 uF + C2 2.2 uF on VDD, C3 10 nF on VDDIO) and Bosch BST-BMI270-DS000-06
 """
 
 load("@stdlib/interfaces.zen", "Spi")
-load("./parts.zen", "C_100N", "C_10N", "C_2U2", "R_0R", "R_10K", "TEST_PAD")
+load("./parts.zen", "C_100N", "C_10N", "C_2U2", "R_0R", "R_10K", "TEST_PAD", "place")
 
+Placed = Module("./placed.zen")
 Resistor = Module("@stdlib/generics/Resistor.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 TestPoint = Module("@stdlib/generics/TestPoint.zen")
@@ -31,13 +32,16 @@ Resistor(name="R_IMUB_SCK", P1=IMUB.CLK, P2=IMUB_SCK_R, **R_0R)
 
 # hw/pinmap.csv: 10k pull-up on IMU A chip select to 3V3_IMU
 Resistor(name="R_IMUA_CS", P1=IMUA.CS, P2=V3V3_IMU, **R_10K)
+# Not in pinmap.csv: same pull-up on IMU B so both chip selects idle high while
+# the MCU is in reset (the two IMUs share nothing else). It is the 14th 10k of bom.csv.
+Resistor(name="R_IMUB_CS", P1=IMUB.CS, P2=V3V3_IMU, **R_10K)
 
-Component(
-    name="U2",
-    symbol=Symbol(library="../lib/symbols/ICM-42688-P.kicad_sym"),
-    footprint=File("../lib/footprints/Bosch_LGA-14_3x2.5mm_P0.5mm.kicad_mod"),
-    part=Part(mpn="ICM-42688-P", manufacturer="TDK InvenSense"),
-    pins={
+place(
+    Placed,
+    "U2",
+    "ICM-42688-P",
+    "Bosch_LGA-14_3x2.5mm_P0.5mm",
+    {
         "VDD": V3V3_IMU,
         "VDDIO": V3V3_IMU,
         "GND": GND,
@@ -50,18 +54,20 @@ Component(
         # feed a 32 kHz CLKIN (DESIGN.md section 4).
         "INT2/FSYNC/CLKIN": IMUA_CLKIN,
     },
+    mpn="ICM-42688-P",
+    manufacturer="TDK InvenSense",
 )
 Capacitor(name="C_U2_VDD_100N", P1=V3V3_IMU, P2=GND, **C_100N)
 Capacitor(name="C_U2_VDD_2U2", P1=V3V3_IMU, P2=GND, **C_2U2)
 Capacitor(name="C_U2_VDDIO", P1=V3V3_IMU, P2=GND, **C_10N)
 TestPoint(name="TP_IMUA_CLKIN", variant=TEST_PAD, P1=IMUA_CLKIN)
 
-Component(
-    name="U3",
-    symbol=Symbol(library="../lib/symbols/BMI270.kicad_sym"),
-    footprint=File("../lib/footprints/Bosch_LGA-14_3x2.5mm_P0.5mm.kicad_mod"),
-    part=Part(mpn="BMI270", manufacturer="Bosch Sensortec"),
-    pins={
+place(
+    Placed,
+    "U3",
+    "BMI270",
+    "Bosch_LGA-14_3x2.5mm_P0.5mm",
+    {
         "VDD": V3V3_IMU,
         "VDDIO": V3V3_IMU,
         "GND": GND,
@@ -79,6 +85,8 @@ Component(
         "OCSB": NotConnected(),
         "OSDO": NotConnected(),
     },
+    mpn="BMI270",
+    manufacturer="Bosch Sensortec",
 )
 Capacitor(name="C_U3_VDD", P1=V3V3_IMU, P2=GND, **C_100N)
 Capacitor(name="C_U3_VDDIO", P1=V3V3_IMU, P2=GND, **C_100N)

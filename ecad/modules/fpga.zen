@@ -13,8 +13,9 @@ VERIFY against the Lattice iCE40 UltraPlus datasheet / TN before populating
 """
 
 load("@stdlib/interfaces.zen", "Spi")
-load("./parts.zen", "C_100N")
+load("./parts.zen", "C_100N", "place")
 
+Placed = Module("./placed.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 
 V3V3_D = io(Power(voltage="1.71V to 3.46V"))
@@ -26,20 +27,48 @@ CDONE = io(Net)
 IRQ = io(Net)
 
 _unused_io = [
-    "IOB_0a", "IOB_2a", "IOB_3b_G6", "IOB_4a", "IOB_5b", "IOB_6a", "IOB_8a", "IOB_9b",
-    "IOB_13b", "IOB_16a", "IOB_18a", "IOB_20a", "IOB_22a", "IOB_23b", "IOB_24a",
-    "IOB_25b_G3", "IOB_29b", "IOB_31b",
-    "IOT_36b", "IOT_38b", "IOT_39a", "IOT_41a", "IOT_42b", "IOT_43a", "IOT_44b",
-    "IOT_45a_G1", "IOT_46b_G0", "IOT_48b", "IOT_49a", "IOT_50b", "IOT_51a",
-    "RGB0", "RGB1", "RGB2",
+    "IOB_0a",
+    "IOB_2a",
+    "IOB_3b_G6",
+    "IOB_4a",
+    "IOB_5b",
+    "IOB_6a",
+    "IOB_8a",
+    "IOB_9b",
+    "IOB_13b",
+    "IOB_16a",
+    "IOB_18a",
+    "IOB_20a",
+    "IOB_22a",
+    "IOB_23b",
+    "IOB_24a",
+    "IOB_25b_G3",
+    "IOB_29b",
+    "IOB_31b",
+    "IOT_36b",
+    "IOT_38b",
+    "IOT_39a",
+    "IOT_41a",
+    "IOT_42b",
+    "IOT_43a",
+    "IOT_44b",
+    "IOT_45a_G1",
+    "IOT_46b_G0",
+    "IOT_48b",
+    "IOT_49a",
+    "IOT_50b",
+    "IOT_51a",
+    "RGB0",
+    "RGB1",
+    "RGB2",
 ]
 
-Component(
-    name="U10",
-    symbol=Symbol(library="../lib/symbols/ICE40UP5K-SG48ITR.kicad_sym"),
-    footprint=File("../lib/footprints/QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm.kicad_mod"),
-    part=Part(mpn="iCE40UP5K-SG48ITR", manufacturer="Lattice"),
-    pins={
+place(
+    Placed,
+    "U10",
+    "ICE40UP5K-SG48ITR",
+    "QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm",
+    {
         "VCC": V1V2,
         "VCCPLL": V1V2,
         "VCCIO_0": V3V3_D,
@@ -54,7 +83,10 @@ Component(
         "~{CRESET}": CRESET_B,
         "CDONE": CDONE,
         "IOT_37a": IRQ,
-    } | {pin: NotConnected() for pin in _unused_io},
+    }
+    | {pin: NotConnected() for pin in _unused_io},
+    mpn="iCE40UP5K-SG48ITR",
+    manufacturer="Lattice",
 )
 Capacitor(name="C_VCC_5", P1=V1V2, P2=GND, **C_100N)
 Capacitor(name="C_VCC_30", P1=V1V2, P2=GND, **C_100N)

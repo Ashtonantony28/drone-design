@@ -14,7 +14,7 @@ _SAMSUNG = "Samsung"
 _UNIOHM = "UniOhm"
 
 
-def _r(value, mpn = None):
+def _r(value, mpn=None):
     part = {"value": value, "package": "0402"}
     if mpn:
         part["mpn"] = mpn
@@ -22,7 +22,7 @@ def _r(value, mpn = None):
     return part
 
 
-def _c(value, package, voltage, dielectric, mpn = None):
+def _c(value, package, voltage, dielectric, mpn=None):
     part = {"value": value, "package": package, "voltage": voltage, "dielectric": dielectric}
     if mpn:
         part["mpn"] = mpn
@@ -39,10 +39,11 @@ R_20K = _r("20k 1%", "0402WGF2002TCE")
 R_33R = _r("33ohm 1%", "0402WGF330JTCE")
 R_100K = _r("100k 1%", "0402WGF1003TCE")
 
-# Not in bom.csv
-R_24K9 = _r("24.9k 1%")
-R_100R = _r("100ohm 1%")
-R_0R = _r("0ohm")
+# Not in bom.csv (see BOM_DIFFS in check_design.py). Same UniOhm 0402WGF series;
+# VERIFY the three order codes before purchasing.
+R_24K9 = _r("24.9k 1%", "0402WGF2492TCE")
+R_100R = _r("100ohm 1%", "0402WGF1000TCE")
+R_0R = _r("0ohm", "0402WGF0000TCE")
 
 C_100N = _c("100nF", "0402", "16V", "X7R", "CL05B104KO5NNNC")
 C_1U = _c("1uF", "0402", "25V", "X5R", "CL05A105KA5NQNC")
@@ -52,10 +53,10 @@ C_22U = _c("22uF", "0805", "25V", "X5R", "CL21A226MAQNNNE")
 C_IN = _c("2.2uF", "1206", "50V", "X7R", "CL31B225KBHNNNE")
 C_12P = _c("12pF", "0402", "50V", "C0G", "CL05C120JB5NNNC")
 
-# Not in bom.csv
-C_10N = _c("10nF", "0402", "16V", "X7R")
-C_20P = _c("20pF", "0402", "50V", "C0G")
-C_220N_HV = _c("220nF", "0603", "100V", "X7R")
+# Not in bom.csv (see BOM_DIFFS in check_design.py). VERIFY the order codes.
+C_10N = _c("10nF", "0402", "50V", "X7R", "CL05B103KB5NNNC")
+C_20P = _c("20pF", "0402", "50V", "C0G", "CL05C200JB5NNNC")
+C_220N_HV = _c("220nF", "0603", "100V", "X7R") | {"mpn": "GRM188R72A224KAC4D", "manufacturer": "Murata"}
 
 FERRITE = {
     "package": "0603",
@@ -68,3 +69,39 @@ FERRITE = {
 
 # DESIGN.md section 8: 1.0 mm round test pads
 TEST_PAD = "Pad_D1.0mm"
+
+
+def place(
+    placed,
+    name,
+    symbol,
+    footprint,
+    pins,
+    prefix="U",
+    symbol_name="",
+    mpn="",
+    manufacturer="",
+    value="",
+    kind="",
+    in_bom=True,
+    dnp=False,
+):
+    """Instantiate modules/placed.zen so that the part keeps `name` as its designator."""
+    kinds = {"Power": "p", "Ground": "g"}
+    args = {"P" + str(i): net for i, net in enumerate(pins.values())}
+    placed(
+        name=name,
+        symbol=symbol,
+        symbol_name=symbol_name,
+        footprint=footprint,
+        prefix=prefix,
+        mpn=mpn,
+        manufacturer=manufacturer,
+        value=value,
+        kind=kind,
+        in_bom=in_bom,
+        pin_names="|".join(pins.keys()),
+        pin_kinds="".join([kinds.get(net.type, "n") for net in pins.values()]),
+        dnp=dnp,
+        **args,
+    )

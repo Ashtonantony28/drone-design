@@ -7,8 +7,9 @@ with a vendor W25N01GVZEIG symbol): 1 /CS, 2 DO(IO1), 3 /WP(IO2), 4 GND,
 """
 
 load("@stdlib/interfaces.zen", "Qspi")
-load("./parts.zen", "C_100N", "R_10K")
+load("./parts.zen", "C_100N", "R_10K", "place")
 
+Placed = Module("./placed.zen")
 Resistor = Module("@stdlib/generics/Resistor.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 
@@ -16,12 +17,12 @@ V3V3_D = io(Power(voltage="2.7V to 3.6V"))
 GND = io(Ground)
 QSPI = io(Qspi)
 
-Component(
-    name="U5",
-    symbol=Symbol(library="../lib/symbols/W25N01GVZEIG.kicad_sym"),
-    footprint=File("../lib/footprints/WSON-8-1EP_8x6mm_P1.27mm_EP3.4x4.3mm.kicad_mod"),
-    part=Part(mpn="W25N01GVZEIG", manufacturer="Winbond"),
-    pins={
+place(
+    Placed,
+    "U5",
+    "W25N01GVZEIG",
+    "WSON-8-1EP_8x6mm_P1.27mm_EP3.4x4.3mm",
+    {
         "VCC": V3V3_D,
         "GND": GND,
         "EP": GND,
@@ -32,6 +33,8 @@ Component(
         "~{WP}/IO_{2}": QSPI.IO2,
         "~{HOLD}/~{RESET}/IO_{3}": QSPI.IO3,
     },
+    mpn="W25N01GVZEIG",
+    manufacturer="Winbond",
 )
 Capacitor(name="C_U5_VCC", P1=V3V3_D, P2=GND, **C_100N)
 

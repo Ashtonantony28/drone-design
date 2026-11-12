@@ -1,7 +1,0 @@
-Placed = Module("../../modules/placed.zen")
-V = Power("3V3_D", voltage="3.3V")
-G = Ground("GND")
-A = Power("VBUS", voltage="5V")
-_p = {"IN": A, "EN": A, "GND": G, "OUT": V}
-Placed(name="U8", symbol="LP5907MFX-3.3", symbol_name="LP5907MFX-3.3", footprint="SOT-23-5", mpn="LP5907MFX-3.3/NOPB", manufacturer="TI", pin_names="|".join(_p.keys()), **{"P" + str(i): n for i, n in enumerate(_p.values())})
-Board(name="t", layers=4, layout_path="layout/t")

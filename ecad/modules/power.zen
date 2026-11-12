@@ -10,8 +10,23 @@ SMBJ26A, B5819W, SWPA4030S ratings quoted below are from memory.
 """
 
 load("@stdlib/units.zen", "Capacitance", "Current", "Frequency", "Inductance", "Resistance", "Voltage")
-load("./parts.zen", "C_100N", "C_10U", "C_1U", "C_20P", "C_220N_HV", "C_22U", "C_IN", "FERRITE", "R_100K", "R_24K9", "TEST_PAD")
+load(
+    "./parts.zen",
+    "C_100N",
+    "C_10U",
+    "C_1U",
+    "C_20P",
+    "C_220N_HV",
+    "C_22U",
+    "C_IN",
+    "FERRITE",
+    "R_100K",
+    "R_24K9",
+    "TEST_PAD",
+    "place",
+)
 
+Placed = Module("./placed.zen")
 Resistor = Module("@stdlib/generics/Resistor.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 FerriteBead = Module("@stdlib/generics/FerriteBead.zen")
@@ -79,18 +94,26 @@ check(_vout_max <= V5.voltage.max, "buck worst-case output exceeds the 5V rail l
 # Inductor: ripple 20-40 % of the 1.5 A device rating at the highest steady-state
 # VIN (SNVSB49D section 10.2.1.2.4), and above the sub-harmonic minimum.
 _k = buck_ripple_factor(VBAT.voltage.max, BUCK_VOUT.nominal, BUCK_FSW.nominal, BUCK_L.nominal, BUCK_IOUT_MAX.nominal)
-check(_k >= 0.2 and _k <= 0.4, "inductor ripple factor K = {} is outside the 0.2..0.4 window of SNVSB49D Eq. 4".format(_k))
+check(
+    _k >= 0.2 and _k <= 0.4, "inductor ripple factor K = {} is outside the 0.2..0.4 window of SNVSB49D Eq. 4".format(_k)
+)
 check(
     BUCK_L.nominal >= buck_l_min(BUCK_VOUT.nominal, BUCK_FSW.nominal),
     "inductor is below LMIN of SNVSB49D Eq. 5",
 )
 
 # LMR36015 recommended operating VIN is 4.2-60 V (SNVSB49D section 8.3)
-check(VBAT.voltage.min >= 4.2 and VBAT.voltage.max <= 60, "VBAT {} is outside the LMR36015 input range".format(VBAT.voltage))
+check(
+    VBAT.voltage.min >= 4.2 and VBAT.voltage.max <= 60,
+    "VBAT {} is outside the LMR36015 input range".format(VBAT.voltage),
+)
 
 # Input protection: the TVS must not conduct at a full 6S pack and must clamp
 # below the LMR36015 absolute maximum VIN of 66 V (SNVSB49D section 8.1).
-check(TVS_STANDOFF.nominal >= VBAT.voltage.max, "TVS standoff {} is below the maximum battery voltage {}".format(TVS_STANDOFF, VBAT.voltage))
+check(
+    TVS_STANDOFF.nominal >= VBAT.voltage.max,
+    "TVS standoff {} is below the maximum battery voltage {}".format(TVS_STANDOFF, VBAT.voltage),
+)
 check(TVS_CLAMP.nominal < 60, "TVS clamp voltage must stay below the LMR36015 60 V operating limit")
 
 # --- VBAT input ---
@@ -120,12 +143,12 @@ Capacitor(name="C_VIN_HF2", P1=VBAT, P2=GND, **C_220N_HV)
 # LMR36015FBRNXR: adjustable, 1 MHz, FPWM. bom.csv names LMR36015FSC5RNXR as a
 # fixed-5 V part, but SNVSB49D lists adjustable RNX variants only, so the output
 # is set with the datasheet divider. See check_design.py BOM_DIFFS.
-Component(
-    name="U6",
-    symbol=Symbol(library="../lib/symbols/LMR36015.kicad_sym"),
-    footprint=File("../lib/footprints/Texas_RNX0012C_VQFN-14-11-1EP_2x3mm_P0.5mm_EP0.25x1.825mm.kicad_mod"),
-    part=Part(mpn="LMR36015FBRNXR", manufacturer="Texas Instruments"),
-    pins={
+place(
+    Placed,
+    "U6",
+    "LMR36015",
+    "Texas_RNX0012C_VQFN-14-11-1EP_2x3mm_P0.5mm_EP0.25x1.825mm",
+    {
         "VIN": VBAT,
         "EN": VBAT,  # "Can be connected directly to VIN; do not float"
         "VCC": BUCK_VCC,
@@ -137,21 +160,25 @@ Component(
         "FB": BUCK_FB,
         "PG": NotConnected(),  # "Can be open or grounded when not used"
     },
+    mpn="LMR36015FBRNXR",
+    manufacturer="Texas Instruments",
 )
 Capacitor(name="C_BOOT", P1=BUCK_BOOT, P2=BUCK_SW, **C_100N)  # 100 nF, >= 16 V
 Capacitor(name="C_VCC", P1=BUCK_VCC, P2=GND, **C_1U)  # 1 uF, >= 16 V
 
 # L1: 4030 shielded. bom.csv has 4.7 uH (K = 0.57 at 25.2 V); 6.8 uH meets Eq. 4.
 # VERIFY: Isat of SWPA4030S6R8MT >= 2.07 A (LMR36015 low-side current limit, max).
-Component(
-    name="L1",
+place(
+    Placed,
+    "L1",
+    "L_Small",
+    "L_Sunlord_SWPA4030S",
+    {"1": BUCK_SW, "2": V5},
     prefix="L",
-    symbol=Symbol(library="../lib/symbols/L_Small.kicad_sym"),
-    footprint=File("../lib/footprints/L_Sunlord_SWPA4030S.kicad_mod"),
-    part=Part(mpn="SWPA4030S6R8MT", manufacturer="Sunlord"),
-    properties={"value": "6.8uH", "inductance": BUCK_L},
-    type="inductor",
-    pins={"1": BUCK_SW, "2": V5},
+    mpn="SWPA4030S6R8MT",
+    manufacturer="Sunlord",
+    value="6.8uH",
+    kind="inductor",
 )
 
 Resistor(name="R_FBT", P1=V5, P2=BUCK_FB, **(R_100K | {"value": R_FBT}))
@@ -171,27 +198,31 @@ TestPoint(name="TP8", variant=TEST_PAD, P1=BUCK_SW)
 
 # --- USB VBUS OR-ing (D1) ---
 # B5819W: 40 V, 1 A Schottky. VERIFY ratings against the Diodes Inc datasheet.
-Component(
-    name="D1",
+place(
+    Placed,
+    "D1",
+    "D_Schottky_Small",
+    "D_SOD-123",
+    {"A": VBUS, "K": V5},
     prefix="D",
-    symbol=Symbol(library="../lib/symbols/D_Schottky_Small.kicad_sym"),
-    footprint=File("../lib/footprints/D_SOD-123.kicad_mod"),
-    part=Part(mpn="B5819W", manufacturer="Diodes Incorporated"),
-    properties={"value": "B5819W"},
-    type="rectifier",
-    pins={"A": VBUS, "K": V5},
+    mpn="B5819W",
+    manufacturer="Diodes Incorporated",
+    value="B5819W",
+    kind="rectifier",
 )
 
 # --- 3V3_D: LDL1117S33R (U7) ---
 # DS12022 section 6: CIN >= 1 uF, suggested 1 uF in / 4.7 uF out, ceramic.
 LDO_D_IOUT_MAX = Current("0.43A")  # DESIGN.md section 3 budget
 check(LDO_D_IOUT_MAX.nominal <= 1.2, "3V3_D load exceeds the LDL1117 1.2 A rating")
-Component(
-    name="U7",
-    symbol=Symbol(library="../lib/symbols/LDL1117S33R.kicad_sym"),
-    footprint=File("../lib/footprints/SOT-223-3_TabPin2.kicad_mod"),
-    part=Part(mpn="LDL1117S33R", manufacturer="STMicroelectronics"),
-    pins={"VIN": V5, "GND": GND, "VOUT": V3V3_D},
+place(
+    Placed,
+    "U7",
+    "LDL1117S33R",
+    "SOT-223-3_TabPin2",
+    {"VIN": V5, "GND": GND, "VOUT": V3V3_D},
+    mpn="LDL1117S33R",
+    manufacturer="STMicroelectronics",
 )
 Capacitor(name="C_U7_IN", P1=V5, P2=GND, **C_1U)
 Capacitor(name="C_U7_OUT", P1=V3V3_D, P2=GND, **C_10U)
@@ -200,24 +231,30 @@ Capacitor(name="C_U7_OUT", P1=V3V3_D, P2=GND, **C_10U)
 # DESIGN.md section 4: 1 uF + 10 uF at the LP5907 output. VERIFY: LP5907 needs
 # >= 1 uF in and out and tolerates 10 uF more on the output.
 FerriteBead(name="FB1", P1=V5, P2=IMU_LDO_IN, **FERRITE)
-Component(
-    name="U8",
-    symbol=Symbol(library="../lib/symbols/LP5907MFX-3.3.kicad_sym", name="LP5907MFX-3.3"),
-    footprint=File("../lib/footprints/SOT-23-5.kicad_mod"),
-    part=Part(mpn="LP5907MFX-3.3/NOPB", manufacturer="Texas Instruments"),
-    pins={"IN": IMU_LDO_IN, "EN": IMU_LDO_IN, "GND": GND, "OUT": V3V3_IMU},
+place(
+    Placed,
+    "U8",
+    "LP5907MFX-3.3",
+    "SOT-23-5",
+    {"IN": IMU_LDO_IN, "EN": IMU_LDO_IN, "GND": GND, "OUT": V3V3_IMU},
+    symbol_name="LP5907MFX-3.3",
+    mpn="LP5907MFX-3.3/NOPB",
+    manufacturer="Texas Instruments",
 )
 Capacitor(name="C_U8_IN", P1=IMU_LDO_IN, P2=GND, **C_1U)
 Capacitor(name="C_U8_OUT1", P1=V3V3_IMU, P2=GND, **C_1U)
 Capacitor(name="C_U8_OUT2", P1=V3V3_IMU, P2=GND, **C_10U)
 
 # --- 1V2_FPGA: TLV75512 (U11), DNP together with the FPGA ---
-Component(
-    name="U11",
-    symbol=Symbol(library="../lib/symbols/TLV75512PDBV.kicad_sym", name="TLV75512PDBV"),
-    footprint=File("../lib/footprints/SOT-23-5.kicad_mod"),
-    part=Part(mpn="TLV75512PDBVR", manufacturer="Texas Instruments"),
-    pins={"IN": V3V3_D, "EN": V3V3_D, "GND": GND, "OUT": V1V2_FPGA},
+place(
+    Placed,
+    "U11",
+    "TLV75512PDBV",
+    "SOT-23-5",
+    {"IN": V3V3_D, "EN": V3V3_D, "GND": GND, "OUT": V1V2_FPGA},
+    symbol_name="TLV75512PDBV",
+    mpn="TLV75512PDBVR",
+    manufacturer="Texas Instruments",
     dnp=True,
 )
 Capacitor(name="C_U11_IN", P1=V3V3_D, P2=GND, dnp=True, **C_1U)

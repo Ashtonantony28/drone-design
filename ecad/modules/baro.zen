@@ -7,8 +7,9 @@ I2C, SDO low for 0x76, and 100 nF per supply pin all come from secondary sources
 """
 
 load("@stdlib/interfaces.zen", "I2c")
-load("./parts.zen", "C_100N", "R_4K7")
+load("./parts.zen", "C_100N", "R_4K7", "place")
 
+Placed = Module("./placed.zen")
 Resistor = Module("@stdlib/generics/Resistor.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 
@@ -16,12 +17,12 @@ V3V3_D = io(Power(voltage="1.7V to 3.6V"))
 GND = io(Ground)
 I2C = io(I2c)
 
-Component(
-    name="U4",
-    symbol=Symbol(library="../lib/symbols/DPS310.kicad_sym"),
-    footprint=File("../lib/footprints/Bosch_LGA-8_2x2.5mm_P0.65mm_ClockwisePinNumbering.kicad_mod"),
-    part=Part(mpn="DPS310XTSA1", manufacturer="Infineon"),
-    pins={
+place(
+    Placed,
+    "U4",
+    "DPS310",
+    "Bosch_LGA-8_2x2.5mm_P0.65mm_ClockwisePinNumbering",
+    {
         "VDD": V3V3_D,
         "VDDIO": V3V3_D,
         "GND": GND,
@@ -30,6 +31,8 @@ Component(
         "SDO": GND,
         "CSB": V3V3_D,
     },
+    mpn="DPS310XTSA1",
+    manufacturer="Infineon",
 )
 Capacitor(name="C_U4_VDD", P1=V3V3_D, P2=GND, **C_100N)
 Capacitor(name="C_U4_VDDIO", P1=V3V3_D, P2=GND, **C_100N)

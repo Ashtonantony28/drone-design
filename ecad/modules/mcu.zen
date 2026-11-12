@@ -9,8 +9,9 @@ there is no backup battery.
 
 load("@stdlib/interfaces.zen", "I2c", "Qspi", "Spi", "Swd", "Uart", "Usb2")
 load("@stdlib/units.zen", "Capacitance")
-load("./parts.zen", "C_100N", "C_10U", "C_12P", "C_1U", "C_2U2", "FERRITE", "R_100K", "R_10K")
+load("./parts.zen", "C_100N", "C_10U", "C_12P", "C_1U", "C_2U2", "FERRITE", "R_100K", "R_10K", "place")
 
+Placed = Module("./placed.zen")
 Resistor = Module("@stdlib/generics/Resistor.zen")
 Capacitor = Module("@stdlib/generics/Capacitor.zen")
 FerriteBead = Module("@stdlib/generics/FerriteBead.zen")
@@ -121,11 +122,35 @@ _assigned = {
 
 # DESIGN.md section 7 "Spare pins": left unconnected in v1
 _spare = [
-    "PA1", "PA2", "PA3", "PA8", "PA10",
-    "PB0", "PB1", "PB4", "PB5", "PB7",
-    "PC2_C", "PC3_C", "PC8", "PC9", "PC13", "PC14", "PC15",
-    "PD2", "PD4", "PD7", "PD14",
-    "PE0", "PE1", "PE5", "PE6", "PE8", "PE10", "PE12", "PE15",
+    "PA1",
+    "PA2",
+    "PA3",
+    "PA8",
+    "PA10",
+    "PB0",
+    "PB1",
+    "PB4",
+    "PB5",
+    "PB7",
+    "PC2_C",
+    "PC3_C",
+    "PC8",
+    "PC9",
+    "PC13",
+    "PC14",
+    "PC15",
+    "PD2",
+    "PD4",
+    "PD7",
+    "PD14",
+    "PE0",
+    "PE1",
+    "PE5",
+    "PE6",
+    "PE8",
+    "PE10",
+    "PE12",
+    "PE15",
 ]
 
 _power = {
@@ -139,12 +164,14 @@ _power = {
     "VCAP_2": VCAP_2,
 }
 
-Component(
-    name="U1",
-    symbol=Symbol(library="../lib/symbols/STM32H743VITx.kicad_sym"),
-    footprint=File("../lib/footprints/LQFP-100_14x14mm_P0.5mm.kicad_mod"),
-    part=Part(mpn="STM32H743VIT6", manufacturer="STMicroelectronics"),
-    pins=_assigned | _power | {pin: NotConnected() for pin in _spare},
+place(
+    Placed,
+    "U1",
+    "STM32H743VITx",
+    "LQFP-100_14x14mm_P0.5mm",
+    _assigned | _power | {pin: NotConnected() for pin in _spare},
+    mpn="STM32H743VIT6",
+    manufacturer="STMicroelectronics",
 )
 
 # DESIGN.md section 5.1: 100 nF at every VDD pin (11, 27, 50, 75, 100) + 10 uF bulk.
@@ -185,13 +212,15 @@ Capacitor(name="C_HSE_OUT", P1=HSE_OUT, P2=GND, **C_12P)
 
 # BOOT0: 10k pull-down, SW1 to 3V3_D. NRST: 100 nF to GND (internal pull-up).
 Resistor(name="R_BOOT0", P1=BOOT0, P2=GND, **R_10K)
-Component(
-    name="SW1",
+place(
+    Placed,
+    "SW1",
+    "SW_Push",
+    "SW_SPST_TS-1088-xR020",
+    {"1": V3V3_D, "2": BOOT0},
     prefix="SW",
-    symbol=Symbol(library="../lib/symbols/SW_Push.kicad_sym"),
-    footprint=File("../lib/footprints/SW_SPST_TS-1088-xR020.kicad_mod"),
-    part=Part(mpn="TS-1088-AR02016", manufacturer="XKB"),
-    pins={"1": V3V3_D, "2": BOOT0},
+    mpn="TS-1088-AR02016",
+    manufacturer="XKB",
 )
 Capacitor(name="C_NRST", P1=NRST, P2=GND, **C_100N)
 
