@@ -37,3 +37,12 @@ it  340 surv 0.893 ret   60.36 len  1359 std 0.050 vf 1.0674 kl 0.0041
 it  350 surv 0.900 ret   52.62 len  1375 std 0.050 vf 1.1622 kl 0.0056
 it  360 surv 0.949 ret   73.46 len  1432 std 0.050 vf 0.7919 kl 0.0045
 it  370 surv 0.949 ret   84.45 len  1434 std 0.050 vf 1.1536 kl 0.0040
+it  360 surv 0.860 ret  -21.27 len   548 std 0.050 vf 1.1617 kl 0.0055
+it  370 surv 0.879 ret   30.38 len  1124 std 0.050 vf 1.0543 kl 0.0069
+it  380 surv 0.848 ret   60.42 len  1297 std 0.050 vf 1.4068 kl 0.0044
+it  390 surv 0.813 ret   58.26 len  1252 std 0.050 vf 1.1297 kl 0.0037
+it  400 surv 0.959 ret   83.56 len  1445 std 0.050 vf 1.1328 kl 0.0046
+it  410 surv 0.882 ret   68.30 len  1345 std 0.050 vf 0.9207 kl 0.0049
+it  420 surv 0.881 ret   81.77 len  1345 std 0.050 vf 1.1946 kl 0.0047
+it  430 surv 0.918 ret   81.68 len  1395 std 0.050 vf 0.9617 kl 0.0058
+it  440 surv 0.824 ret   67.37 len  1273 std 0.050 vf 1.0247 kl 0.0035
