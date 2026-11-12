@@ -1,0 +1,97 @@
+"""iCE40UP5K-SG48 co-processor block. The whole module is DNP on v1.
+
+The MCU configures the FPGA as an SPI slave over SPI3 and then uses the same
+pins as the runtime link, so there is no configuration flash.
+
+Pin numbers come from the KiCad library symbol ICE40UP5K-SG48ITR.
+VERIFY against the Lattice iCE40 UltraPlus datasheet / TN before populating
+(nothing from Lattice was reachable from the build container):
+  - SPI pins in slave-configuration mode (SO 14, SCK 15, SS 16, SI 17)
+  - VPP_2V5 tied to 3V3_D (DESIGN.md section 3)
+  - VCCPLL tied straight to 1V2 with 100 nF (Lattice suggests an RC filter)
+  - FPGA_IRQ on IOT_37a (pin 23) is an arbitrary user I/O choice
+"""
+
+load("@stdlib/interfaces.zen", "Spi")
+load("./parts.zen", "C_100N", "place")
+
+Placed = Module("./placed.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+
+V3V3_D = io(Power(voltage="1.71V to 3.46V"))
+V1V2 = io(Power(voltage="1.14V to 1.26V"))
+GND = io(Ground)
+SPI = io(Spi)
+CRESET_B = io(Net)
+CDONE = io(Net)
+IRQ = io(Net)
+
+_unused_io = [
+    "IOB_0a",
+    "IOB_2a",
+    "IOB_3b_G6",
+    "IOB_4a",
+    "IOB_5b",
+    "IOB_6a",
+    "IOB_8a",
+    "IOB_9b",
+    "IOB_13b",
+    "IOB_16a",
+    "IOB_18a",
+    "IOB_20a",
+    "IOB_22a",
+    "IOB_23b",
+    "IOB_24a",
+    "IOB_25b_G3",
+    "IOB_29b",
+    "IOB_31b",
+    "IOT_36b",
+    "IOT_38b",
+    "IOT_39a",
+    "IOT_41a",
+    "IOT_42b",
+    "IOT_43a",
+    "IOT_44b",
+    "IOT_45a_G1",
+    "IOT_46b_G0",
+    "IOT_48b",
+    "IOT_49a",
+    "IOT_50b",
+    "IOT_51a",
+    "RGB0",
+    "RGB1",
+    "RGB2",
+]
+
+place(
+    Placed,
+    "U10",
+    "ICE40UP5K-SG48ITR",
+    "QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm",
+    {
+        "VCC": V1V2,
+        "VCCPLL": V1V2,
+        "VCCIO_0": V3V3_D,
+        "VCCIO_2": V3V3_D,
+        "SPI_VCCIO1": V3V3_D,
+        "VPP_2V5": V3V3_D,
+        "GND": GND,
+        "IOB_32a_SPI_SO": SPI.MISO,
+        "IOB_33b_SPI_SI": SPI.MOSI,
+        "IOB_34a_SPI_SCK": SPI.CLK,
+        "IOB_35b_SPI_SS": SPI.CS,
+        "~{CRESET}": CRESET_B,
+        "CDONE": CDONE,
+        "IOT_37a": IRQ,
+    }
+    | {pin: NotConnected() for pin in _unused_io},
+    mpn="iCE40UP5K-SG48ITR",
+    manufacturer="Lattice",
+)
+Capacitor(name="C_VCC_5", P1=V1V2, P2=GND, **C_100N)
+Capacitor(name="C_VCC_30", P1=V1V2, P2=GND, **C_100N)
+Capacitor(name="C_VCCPLL", P1=V1V2, P2=GND, **C_100N)
+Capacitor(name="C_VCCIO_0", P1=V3V3_D, P2=GND, **C_100N)
+Capacitor(name="C_VCCIO_1", P1=V3V3_D, P2=GND, **C_100N)
+Capacitor(name="C_VCCIO_2", P1=V3V3_D, P2=GND, **C_100N)
+Capacitor(name="C_VPP", P1=V3V3_D, P2=GND, **C_100N)

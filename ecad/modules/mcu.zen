@@ -1,0 +1,232 @@
+"""STM32H743VIT6 (U1) with decoupling, VCAP, HSE crystal, BOOT0 and NRST.
+
+Pin assignment: neuroflight-fc/hw/pinmap.csv (checked by ecad/check_design.py).
+Power pins and decoupling: ST DS12110 rev 7, Table 9 (LQFP100 column), Table 25
+(CEXT = 2.2 uF, ESR < 100 mOhm on each VCAP) and section 6.3.20 (100 nF per VDD).
+The LQFP100 has no VDD33USB / VDDLDO pin; VBAT (pin 6) is tied to VDD because
+there is no backup battery.
+"""
+
+load("@stdlib/interfaces.zen", "I2c", "Qspi", "Spi", "Swd", "Uart", "Usb2")
+load("@stdlib/units.zen", "Capacitance")
+load("./parts.zen", "C_100N", "C_10U", "C_12P", "C_1U", "C_2U2", "FERRITE", "R_100K", "R_10K", "place")
+
+Placed = Module("./placed.zen")
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Capacitor = Module("@stdlib/generics/Capacitor.zen")
+FerriteBead = Module("@stdlib/generics/FerriteBead.zen")
+Crystal = Module("@stdlib/generics/Crystal.zen")
+
+# DS12110: VDD 1.62-3.6 V; this board runs USB FS, which needs VDD >= 3.0 V.
+V3V3_D = io(Power(voltage="3.0V to 3.6V"))
+VDDA = io(Power(voltage="3.0V to 3.6V"), direction="output")
+GND = io(Ground)
+
+IMUA = io(Spi)
+IMUA_INT1 = io(Net)
+IMUB = io(Spi)
+IMUB_INT1 = io(Net)
+BARO = io(I2c)
+FLASH = io(Qspi)
+AUX_I2C = io(I2c)
+RC = io(Uart)
+FLOW = io(Uart)
+AUX = io(Uart)
+ESC_TLM = io(Net)
+MOTOR0 = io(Net)
+MOTOR1 = io(Net)
+MOTOR2 = io(Net)
+MOTOR3 = io(Net)
+FPGA = io(Spi)
+FPGA_CRESET_B = io(Net)
+FPGA_CDONE = io(Net)
+FPGA_IRQ = io(Net)
+VBAT_SENSE = io(Net)
+CURR_SENSE = io(Net)
+V5_SENSE = io(Net)
+VBUS_SENSE = io(Net)
+USB = io(Usb2)
+SWD = io(Swd)
+SWO = io(Net)
+NRST = io(Net)
+BOOT0 = io(Net)
+LED0 = io(Net)
+LED1 = io(Net)
+BEEPER = io(Net)
+LED_STRIP = io(Net)
+
+HSE_IN = Net()
+HSE_OUT = Net()
+# Core regulator output, 1.0-1.35 V depending on VOS (DS12110 Table 25); no external load
+VCAP_1 = Power(voltage="0.95V to 1.4V")
+VCAP_2 = Power(voltage="0.95V to 1.4V")
+
+# hw/pinmap.csv, in package pin order
+_assigned = {
+    "PE2": FLASH.IO2,
+    "PE3": LED0,
+    "PE4": LED1,
+    "PH0": HSE_IN,
+    "PH1": HSE_OUT,
+    "NRST": NRST,
+    "PC0": VBAT_SENSE,
+    "PC1": CURR_SENSE,
+    "PA0": LED_STRIP,
+    "PA4": IMUA.CS,
+    "PA5": IMUA.CLK,
+    "PA6": IMUA.MISO,
+    "PA7": IMUA.MOSI,
+    "PC4": IMUA_INT1,
+    "PC5": V5_SENSE,
+    "PB2": FLASH.CLK,
+    "PE7": ESC_TLM,
+    "PE9": MOTOR0,
+    "PE11": MOTOR1,
+    "PE13": MOTOR2,
+    "PE14": MOTOR3,
+    "PB10": AUX_I2C.SCL,
+    "PB11": AUX_I2C.SDA,
+    "PB12": IMUB.CS,
+    "PB13": IMUB.CLK,
+    "PB14": IMUB.MISO,
+    "PB15": IMUB.MOSI,
+    "PD8": FLOW.TX,
+    "PD9": FLOW.RX,
+    "PD10": IMUB_INT1,
+    "PD11": FLASH.IO0,
+    "PD12": FLASH.IO1,
+    "PD13": FLASH.IO3,
+    "PD15": BEEPER,
+    "PC6": AUX.TX,
+    "PC7": AUX.RX,
+    "PA9": VBUS_SENSE,
+    "PA11": USB.D.N,
+    "PA12": USB.D.P,
+    "PA13": SWD.SWDIO,
+    "PA14": SWD.SWCLK,
+    "PA15": FPGA.CS,
+    "PC10": FPGA.CLK,
+    "PC11": FPGA.MISO,
+    "PC12": FPGA.MOSI,
+    "PD0": FPGA_CRESET_B,
+    "PD1": FPGA_CDONE,
+    "PD3": FPGA_IRQ,
+    "PD5": RC.TX,
+    "PD6": RC.RX,
+    "PB3": SWO,
+    "PB6": FLASH.CS,
+    "BOOT0": BOOT0,
+    "PB8": BARO.SCL,
+    "PB9": BARO.SDA,
+}
+
+# DESIGN.md section 7 "Spare pins": left unconnected in v1
+_spare = [
+    "PA1",
+    "PA2",
+    "PA3",
+    "PA8",
+    "PA10",
+    "PB0",
+    "PB1",
+    "PB4",
+    "PB5",
+    "PB7",
+    "PC2_C",
+    "PC3_C",
+    "PC8",
+    "PC9",
+    "PC13",
+    "PC14",
+    "PC15",
+    "PD2",
+    "PD4",
+    "PD7",
+    "PD14",
+    "PE0",
+    "PE1",
+    "PE5",
+    "PE6",
+    "PE8",
+    "PE10",
+    "PE12",
+    "PE15",
+]
+
+_power = {
+    "VDD": V3V3_D,
+    "VBAT": V3V3_D,
+    "VDDA": VDDA,
+    "VREF+": VDDA,
+    "VSS": GND,
+    "VSSA": GND,
+    "VCAP_1": VCAP_1,
+    "VCAP_2": VCAP_2,
+}
+
+place(
+    Placed,
+    "U1",
+    "STM32H743VITx",
+    "LQFP-100_14x14mm_P0.5mm",
+    _assigned | _power | {pin: NotConnected() for pin in _spare},
+    mpn="STM32H743VIT6",
+    manufacturer="STMicroelectronics",
+)
+
+# DESIGN.md section 5.1: 100 nF at every VDD pin (11, 27, 50, 75, 100) + 10 uF bulk.
+MCU_VDD_PINS = [11, 27, 50, 75, 100]
+for pin in MCU_VDD_PINS:
+    Capacitor(name="C_VDD_{}".format(pin), P1=V3V3_D, P2=GND, **C_100N)
+Capacitor(name="C_VDD_BULK", P1=V3V3_D, P2=GND, **C_10U)
+Capacitor(name="C_VBAT_6", P1=V3V3_D, P2=GND, **C_100N)
+
+# VCAP pins 48 and 73: 2.2 uF each (DS12110 Table 25, +/-20 % tolerated)
+check(
+    abs(Capacitance(C_2U2["value"]).nominal - 2.2e-6) <= 0.2 * 2.2e-6,
+    "VCAP capacitor must be 2.2 uF +/-20 %",
+)
+Capacitor(name="C_VCAP_48", P1=VCAP_1, P2=GND, **C_2U2)
+Capacitor(name="C_VCAP_73", P1=VCAP_2, P2=GND, **C_2U2)
+
+# VDDA / VREF+: FB2 + 1 uF + 100 nF
+FerriteBead(name="FB2", P1=V3V3_D, P2=VDDA, **FERRITE)
+Capacitor(name="C_VDDA_1U", P1=VDDA, P2=GND, **C_1U)
+Capacitor(name="C_VDDA_100N", P1=VDDA, P2=GND, **C_100N)
+
+# HSE: 8 MHz crystal. Load caps per bom.csv (12 pF). With C1 = C2 the crystal sees
+# CL = C/2 + Cstray = 9..11 pF for 3..5 pF stray. VERIFY: the load capacitance of
+# X322508MSB4SI was not confirmed; if it is a 20 pF part the caps must be ~33 pF.
+Crystal(
+    name="Y1",
+    package="3225_4Pin",
+    frequency="8MHz",
+    mpn="X322508MSB4SI",
+    manufacturer="Yangxing",
+    XIN=HSE_IN,
+    XOUT=HSE_OUT,
+    GND=GND,
+)
+Capacitor(name="C_HSE_IN", P1=HSE_IN, P2=GND, **C_12P)
+Capacitor(name="C_HSE_OUT", P1=HSE_OUT, P2=GND, **C_12P)
+
+# BOOT0: 10k pull-down, SW1 to 3V3_D. NRST: 100 nF to GND (internal pull-up).
+Resistor(name="R_BOOT0", P1=BOOT0, P2=GND, **R_10K)
+place(
+    Placed,
+    "SW1",
+    "SW_Push",
+    "SW_SPST_TS-1088-xR020",
+    {"1": V3V3_D, "2": BOOT0},
+    prefix="SW",
+    mpn="TS-1088-AR02016",
+    manufacturer="XKB",
+)
+Capacitor(name="C_NRST", P1=NRST, P2=GND, **C_100N)
+
+# Bus straps that must be fitted whether or not the FPGA is (hw/pinmap.csv notes):
+# SS_B idles high, CRESET_B and CDONE are open-drain, IRQ idles low.
+Resistor(name="R_FPGA_SS", P1=FPGA.CS, P2=V3V3_D, **R_10K)
+Resistor(name="R_FPGA_CRESET", P1=FPGA_CRESET_B, P2=V3V3_D, **R_10K)
+Resistor(name="R_FPGA_CDONE", P1=FPGA_CDONE, P2=V3V3_D, **R_10K)
+Resistor(name="R_FPGA_IRQ", P1=FPGA_IRQ, P2=GND, **R_100K)

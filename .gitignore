@@ -4,3 +4,4 @@ runs/*/last.pt
 runs/*/progress.csv
 runs/*/config.yaml
 out/mech_checks.json
+ecad/layout/build/*.json

@@ -1,0 +1,97 @@
+"""LEDs, buzzer driver and LED-strip pad (DESIGN.md section 6).
+
+LED forward voltages are typical figures from memory (VERIFY against the LED
+actually chosen): InGaN green/blue about 2.7-3.3 V, red about 1.8-2.2 V. With
+the specified 1 k resistor on a 3.3 V rail the green and blue LEDs run at a few
+hundred microamps, which is dim; the checks below only guard the limits.
+"""
+
+load("@stdlib/units.zen", "Resistance", "Voltage")
+load("./parts.zen", "R_10K", "R_1K", "place")
+
+Placed = Module("./placed.zen")
+Resistor = Module("@stdlib/generics/Resistor.zen")
+Led = Module("@stdlib/generics/Led.zen")
+TestPoint = Module("@stdlib/generics/TestPoint.zen")
+
+V5 = io(Power(voltage="3.8V to 5.5V"))
+V3V3_D = io(Power(voltage="3.0V to 3.6V"))
+GND = io(Ground)
+LED0 = io(Net)
+LED1 = io(Net)
+BEEPER = io(Net)
+LED_STRIP = io(Net)
+
+LED_PWR_A = Net()
+LED_STATUS_A = Net()
+LED_WARN_A = Net()
+BUZZER_N = Net()
+
+# DS12110 rev 7 Table 22 "Current characteristics": 20 mA max per I/O; stay far
+# below it so the pin still meets its VOH.
+LED_I_MAX = 0.008
+
+
+def led_current(v_supply, v_f, r):
+    # I = (VSUPPLY - VF) / R
+    return (v_supply - v_f) / r
+
+
+def _led(name, color, vf, anode_drive, mid, mpn):
+    r = Resistance(R_1K["value"])
+    vf = Voltage(vf)
+    i_max = led_current(V3V3_D.voltage.max, vf.min, r.min)
+    i_typ = led_current(V3V3_D.voltage.nominal, vf.nominal, r.nominal)
+    check(i_max <= LED_I_MAX, "{} LED current {} A exceeds {} A".format(name, i_max, LED_I_MAX))
+    check(i_typ > 0, "{} LED does not light at its typical forward voltage".format(name))
+    Resistor(name="R_" + name, P1=anode_drive, P2=mid, **R_1K)
+    Led(
+        name="LED_" + name,
+        package="0603",
+        color=color,
+        forward_voltage=vf,
+        mpn=mpn[0],
+        manufacturer=mpn[1],
+        A=mid,
+        K=GND,
+    )
+
+
+# bom.csv gives one green MPN "(or equiv)" for all three colours; the green LED
+# carries it, blue and red use Lite-On 0603 equivalents (LED1 = D4, LED2 = D5,
+# LED3 = D6: the stdlib Led generic uses the D prefix).
+_led("PWR", "green", "2.7V to 3.2V (3.0V)", V3V3_D, LED_PWR_A, mpn=("19-217/GHC-YR1S2/3T", "Everlight"))
+_led("STATUS", "blue", "2.7V to 3.2V (3.0V)", LED0, LED_STATUS_A, mpn=("LTST-C193TBKT-5A", "Lite-On"))
+_led("WARN", "red", "1.8V to 2.2V (2.0V)", LED1, LED_WARN_A, mpn=("LTST-C190KRKT", "Lite-On"))
+
+# Buzzer: external 5 V active buzzer between the BZ+ (5V) and BZ- pads, switched
+# low-side by Q1 (gate PD15, 10k pull-down), D2 across the buzzer.
+place(
+    Placed,
+    "Q1",
+    "AO3400A",
+    "SOT-23",
+    {"G": BEEPER, "S": GND, "D": BUZZER_N},
+    prefix="Q",
+    symbol_name="AO3400A",
+    mpn="AO3400A",
+    manufacturer="Alpha & Omega Semiconductor",
+)
+Resistor(name="R_GATE", P1=BEEPER, P2=GND, **R_10K)
+place(
+    Placed,
+    "D2",
+    "D_Small",
+    "D_SOD-323",
+    {"A": BUZZER_N, "K": V5},
+    prefix="D",
+    mpn="1N4148WS",
+    manufacturer="onsemi",
+    value="1N4148WS",
+    kind="rectifier",
+)
+TestPoint(name="BZ_P", variant="Pad_1.5x1.5mm", P1=V5)
+TestPoint(name="BZ_N", variant="Pad_1.5x1.5mm", P1=BUZZER_N)
+
+# WS2812 data pad (PA0); strip power comes from its own BEC
+TestPoint(name="PAD_LED_STRIP", variant="Pad_D1.5mm", P1=LED_STRIP)

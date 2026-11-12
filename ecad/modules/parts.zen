@@ -1,0 +1,107 @@
+"""Shared part selections for the NF flight controller.
+
+MPNs are the ones in neuroflight-fc/hw/bom.csv. Entries with no MPN are parts the
+schematic needs but bom.csv does not list yet; they are specified by value only
+and are enumerated in ecad/check_design.py (BOM_DIFFS).
+
+Capacitor voltages are decoded from the Samsung MPN (Q = 6.3 V, P = 10 V,
+O = 16 V, A = 25 V, B = 50 V), which for three lines differs from the bom.csv
+description (C-1U says 16 V, C-2U2 says 10 V, C-22U says 10 V). VERIFY: confirm
+against the Samsung datasheets when ordering.
+"""
+
+_SAMSUNG = "Samsung"
+_UNIOHM = "UniOhm"
+
+
+def _r(value, mpn=None):
+    part = {"value": value, "package": "0402"}
+    if mpn:
+        part["mpn"] = mpn
+        part["manufacturer"] = _UNIOHM
+    return part
+
+
+def _c(value, package, voltage, dielectric, mpn=None):
+    part = {"value": value, "package": package, "voltage": voltage, "dielectric": dielectric}
+    if mpn:
+        part["mpn"] = mpn
+        part["manufacturer"] = _SAMSUNG
+    return part
+
+
+R_10K = _r("10k 1%", "0402WGF1002TCE")
+R_1K = _r("1k 1%", "0402WGF1001TCE")
+R_4K7 = _r("4.7k 1%", "0402WGF4701TCE")
+R_2K2 = _r("2.2k 1%", "0402WGF2201TCE")
+R_5K1 = _r("5.1k 1%", "0402WGF5101TCE")
+R_20K = _r("20k 1%", "0402WGF2002TCE")
+R_33R = _r("33ohm 1%", "0402WGF330JTCE")
+R_100K = _r("100k 1%", "0402WGF1003TCE")
+
+# Not in bom.csv (see BOM_DIFFS in check_design.py). Same UniOhm 0402WGF series;
+# VERIFY the three order codes before purchasing.
+R_24K9 = _r("24.9k 1%", "0402WGF2492TCE")
+R_100R = _r("100ohm 1%", "0402WGF1000TCE")
+R_0R = _r("0ohm", "0402WGF0000TCE")
+
+C_100N = _c("100nF", "0402", "16V", "X7R", "CL05B104KO5NNNC")
+C_1U = _c("1uF", "0402", "25V", "X5R", "CL05A105KA5NQNC")
+C_2U2 = _c("2.2uF", "0402", "6.3V", "X5R", "CL05A225MQ5NSNC")
+C_10U = _c("10uF", "0603", "10V", "X5R", "CL10A106KP8NNNC")
+C_22U = _c("22uF", "0805", "25V", "X5R", "CL21A226MAQNNNE")
+C_IN = _c("2.2uF", "1206", "50V", "X7R", "CL31B225KBHNNNE")
+C_12P = _c("12pF", "0402", "50V", "C0G", "CL05C120JB5NNNC")
+
+# Not in bom.csv (see BOM_DIFFS in check_design.py). VERIFY the order codes.
+C_10N = _c("10nF", "0402", "50V", "X7R", "CL05B103KB5NNNC")
+C_20P = _c("20pF", "0402", "50V", "C0G", "CL05C200JB5NNNC")
+C_220N_HV = _c("220nF", "0603", "100V", "X7R") | {"mpn": "GRM188R72A224KAC4D", "manufacturer": "Murata"}
+
+FERRITE = {
+    "package": "0603",
+    "value": "600ohm",
+    "frequency": "100MHz",
+    "current": "1A",
+    "mpn": "BLM18PG601SN1D",
+    "manufacturer": "Murata",
+}
+
+# DESIGN.md section 8: 1.0 mm round test pads
+TEST_PAD = "Pad_D1.0mm"
+
+
+def place(
+    placed,
+    name,
+    symbol,
+    footprint,
+    pins,
+    prefix="U",
+    symbol_name="",
+    mpn="",
+    manufacturer="",
+    value="",
+    kind="",
+    in_bom=True,
+    dnp=False,
+):
+    """Instantiate modules/placed.zen so that the part keeps `name` as its designator."""
+    kinds = {"Power": "p", "Ground": "g"}
+    args = {"P" + str(i): net for i, net in enumerate(pins.values())}
+    placed(
+        name=name,
+        symbol=symbol,
+        symbol_name=symbol_name,
+        footprint=footprint,
+        prefix=prefix,
+        mpn=mpn,
+        manufacturer=manufacturer,
+        value=value,
+        kind=kind,
+        in_bom=in_bom,
+        pin_names="|".join(pins.keys()),
+        pin_kinds="".join([kinds.get(net.type, "n") for net in pins.values()]),
+        dnp=dnp,
+        **args,
+    )
