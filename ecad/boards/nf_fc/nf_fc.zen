@@ -293,15 +293,17 @@ Board(
                     via_drill=0.3,
                     color="#C20000FF",
                 ),
-                # stdlib 4-layer GCPW figure for 90 ohm on L1 over the 0.21 mm prepreg
+                # 90 ohm edge-coupled pair on L1 over the 0.21 mm prepreg: layout/impedance.py (field
+                # solution on this stackup) gives 0.24 mm / 0.155 mm -> 90.3 ohm; the stdlib figure
+                # 0.1867 / 0.127 comes out at 94 ohm
                 NetClass(
                     name="90Ohm Diff",
                     clearance=0.15,
-                    track_width=0.1867,
+                    track_width=0.24,
                     via_diameter=JLC_VIA.diameter,
                     via_drill=JLC_VIA.drill,
-                    diff_pair_width=0.1867,
-                    diff_pair_gap=0.127,
+                    diff_pair_width=0.24,
+                    diff_pair_gap=0.155,
                     color="#00C200FF",
                     differential_pair_impedance=Impedance(90),
                 ),

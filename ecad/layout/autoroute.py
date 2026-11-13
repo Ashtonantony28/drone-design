@@ -96,6 +96,8 @@ OUTER_ONLY = ("IMUA_", "IMUB_", "IMU.", "MOTOR", "ESC_M", "CONN.ESC_M", "MCU.HSE
 # Length matching (DESIGN.md 5.7: the 6 QSPI lines to +-2 mm): after routing, the shorter lines
 # are lengthened with meanders until all lie within MATCH_WINDOW of the longest.
 MATCH = {"QSPI": (("QSPI_CLK", "QSPI_NCS", "QSPI_IO0", "QSPI_IO1", "QSPI_IO2", "QSPI_IO3"), "MCU.U1.X", "FLASH.U5.X")}
+MATCH_TRIES = 16            # detours tried per round that the plane pours do not survive
+MATCH_APART = 15            # cells: the next detour tried turns at least this far from a failed one
 MATCH_WINDOW = 2.0          # mm below the longest line (+-2 mm allows 4)
 COPPER_Z = {"F.Cu": 0.0175, "In2.Cu": 1.3332, "B.Cu": 1.5687}   # mm, JLC04161H-7628 (layout/impedance.py reads the same from the board)
 
@@ -974,7 +976,7 @@ class Negotiator:
                             push(heap, (ng, j))
         return dist, prev
 
-    def lengthen(self, net, src, dst, lo, hi):
+    def lengthen(self, net, src, dst, lo, hi, shorten=False, accept=None):
         """Bring the src-dst copper length of a routed net into [lo, hi] mm by detours: a
         stretch of the connection on the path (all of it, or a half, a quarter ...) is taken
         out and laid again through a waypoint W, chosen so that (shortest way from its start
@@ -1035,6 +1037,19 @@ class Negotiator:
             fr = b"".join(a.astype(np.uint8).tobytes() for a in fr_arr)
             vi = v_ok.astype(np.uint8).tobytes()
             ds, ps = self.flood(s, fr, vi)
+            if shorten:                               # the shortest free way from s to t instead of the old one
+                if ds[t] >= INF:
+                    return
+                cells = path[:i] + back(ps, t)[::-1] + path[j + 1:]
+                vcells = [cells[q] % NN for q in range(1, len(cells)) if cells[q] // NN != cells[q - 1] // NN]
+                if any(math.hypot(a % N - b % N, a // N - b // N) * GRID < VIA_PITCH for n, b in enumerate(vcells) for a in vcells[:n]):
+                    return
+                tr, vs = self.geometry(net, st, cells)
+                new = rest + [{"tracks": tr, "vias": vs, "cells": cells}]
+                got = self.net_length(net, src, dst, new)
+                if got is not None and got <= now - 1.0:
+                    yield new, got, None
+                return
             dt, pt = self.flood(t, fr, vi)
             a_s, a_t = np.array(ds, dtype=np.int64), np.array(dt, dtype=np.int64)
             total = np.where((a_s < INF) & (a_t < INF), a_s + a_t, INF)
@@ -1055,6 +1070,8 @@ class Negotiator:
                     break
                 if a_s[w] < 100 or a_t[w] < 100:
                     continue
+                if any(abs(w % N - b % N) <= MATCH_APART and abs(w % NN // N - b % NN // N) <= MATCH_APART for b in bad):
+                    continue                      # next to a waypoint whose detour cut a plane apart
                 tried += 1
                 leg1 = back(ps, w)[::-1]          # s ... w
                 leg2 = back(pt, w)                # w ... t
@@ -1075,19 +1092,58 @@ class Negotiator:
                 new = rest + [{"tracks": tr, "vias": vs, "cells": cells}]
                 got = self.net_length(net, src, dst, new)
                 if got is not None and got <= hi and (got >= lo if exact else got >= now + 0.8):
-                    return new, got
-            return None
+                    yield new, got, w
 
         r = self.routes[net]
         conns = list(r["conns"])
         self.stamp(net, -1)
-        counts = [self.class_count(net, st, li) for li in range(nl)]
-        free = [st["passable"][li] & (counts[li] == 0) for li in range(nl)]
-        via = st["via"] & (self.via_count(st) == 0)
+        free, via = [], None
+
+        def refresh():
+            nonlocal via
+            counts = [self.class_count(net, st, li) for li in range(nl)]
+            free[:] = [st["passable"][li] & (counts[li] == 0) for li in range(nl)]
+            via = st["via"] & (self.via_count(st) == 0)
+
+        budget = [MATCH_TRIES]
+        bad = []
+
+        def take(cands):
+            """The first candidate the planes survive (accept() repairs them and says whether all is joined)."""
+            for new, got, w in cands:
+                if accept is None:
+                    return new, got
+                if budget[0] <= 0:
+                    return None
+                budget[0] -= 1
+                snap = self.snapshot()
+                self.routes[net] = {"conns": new, "stamps": [], "open": r["open"]}
+                self.stamp(net)
+                ok = accept()
+                if not ok:
+                    self.restore(snap)
+                    if w is not None:
+                        bad.append(w)
+                self.stamp(net, -1)
+                refresh()
+                if ok:
+                    return new, got
+            return None
+
+        refresh()
         now = base
-        for _ in range(8):
+        if shorten:
+            for k in sorted(range(len(conns)), key=lambda k: -len(conns[k]["cells"])):
+                if self.net_length(net, src, dst, conns[:k] + conns[k + 1:]) is None:
+                    c = conns[k]
+                    got = take(detour(conns, k, 0, len(c["cells"]) - 1, now, True))
+                    if got:
+                        conns, now = got
+                        break
+        for _ in range(0 if shorten else 8):
             if now >= lo:
                 break
+            budget[0] = MATCH_TRIES
             on_path = [k for k in range(len(conns)) if self.net_length(net, src, dst, conns[:k] + conns[k + 1:]) is None]
             if not on_path:
                 break
@@ -1098,7 +1154,7 @@ class Negotiator:
             got = None
             for exact in (True, False):
                 for i, j in spans:
-                    got = detour(conns, k, i, j, now, exact)
+                    got = take(detour(conns, k, i, j, now, exact))
                     if got:
                         break
                 if got:
@@ -1110,7 +1166,7 @@ class Negotiator:
         self.stamp(net)
         return base, now
 
-    def match_lengths(self):
+    def match_lengths(self, planes_ok=None):
         for name, (nets, src, dst) in MATCH.items():
             nets = [n for n in nets if n in self.routes and not self.routes[n]["open"]]
             if not nets:
@@ -1120,10 +1176,18 @@ class Negotiator:
                 print("length matching %s: not all lines are routed" % name, flush=True)
                 continue
             before = dict(L)
+            for _ in range(3):                        # the longest lines first get the shortest way that is free now
+                n = max(nets, key=L.get)
+                got = self.lengthen(n, src, dst, 0.0, 0.0, shorten=True, accept=planes_ok)[1]
+                if got >= L[n] - 1.0:
+                    break
+                L[n] = got
             top = max(L.values())
             for n in sorted(nets, key=L.get):
-                if L[n] < top - MATCH_WINDOW:
-                    L[n] = self.lengthen(n, src, dst, top - MATCH_WINDOW, top)[1]
+                if L[n] >= top - MATCH_WINDOW:
+                    continue
+                # a detour on L3 can cut a plane pour apart: such a candidate is passed over
+                L[n] = self.lengthen(n, src, dst, top - MATCH_WINDOW, top, accept=planes_ok)[1]
             print("length matching %s: %s -> spread %.2f mm (was %.2f mm)" % (name, ", ".join("%s %.2f" % (n.split("_")[-1], L[n]) for n in nets),
                   max(L.values()) - min(L.values()), max(before.values()) - min(before.values())), flush=True)
 
@@ -1266,9 +1330,12 @@ class Negotiator:
                 break
         if total_open() == 0 and not os.environ.get("AUTOROUTE_NO_MATCH"):
             snap = self.snapshot()
-            self.match_lengths()
-            repair_planes()
-            if total_open():
+
+            def planes_ok():
+                repair_planes()
+                return not total_open()
+            self.match_lengths(planes_ok)
+            if not planes_ok():
                 print("length matching cut a plane apart: taken back", flush=True)
                 self.restore(snap)
                 repair_planes()
