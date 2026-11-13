@@ -45,6 +45,7 @@ docker run --rm -v $PWD:$PWD -w $PWD/ecad kicad/kicad:10.0.8 \
 | `mech.fea`: full thrust | SF 31 |
 | `mech.fea`: first frame mode | 213-221 Hz, 21-32 % away from hover rotor speed (≥ 20 %) |
 | `flight.fly`: PID fallback on NF-3D vs the original neuroflight vehicle, 256 randomized vehicles per scenario | PASS (within 3 points in both corners) |
+| `flight.fly`: v3 policy with thrust calibration (`v3cal`), same comparison (advisory) | within 3 points in both corners |
 | `pcb build` (Zener) | 143 components, no errors or warnings |
 | `ecad/check_design.py` (pin map, decoupling, rails, BOM vs neuroflight-fc) | 9 passed |
 | `ecad/check_layout.py` (IMU spacing, DShot length, holes, decoupling, GND plane) | 11 passed |
@@ -56,12 +57,18 @@ and filleted arm roots.
 
 ## Findings and open items
 
-1. **The neural policy needs retraining for this airframe.** neuroflight's `hover_ctbr_v3` holds up on
-   the nominal NF-3D (85.9-99.2 %). On the weak-motor corner it collapses to 34-54 %. A quick
-   fine-tune (`flight/retrain.py`, 440 PPO iterations from the exported weights, with no training
-   checkpoint available) made it worse. The PID fallback flies both corners as well as it flies the
-   original vehicle. Next step: retrain in neuroflight-fc against `out/vehicle_nominal.yaml` with the
-   widened randomization in `runs/nf3d_ft/randomization.yaml`. See `out/FLIGHT-REPORT.md`.
+1. **The neural policy flies NF-3D after a thrust calibration, with no retraining.** neuroflight's
+   `hover_ctbr_v3` used as-is holds up on the nominal NF-3D (99.2/85.9/95.3 % hover/tilt/throw). On the
+   weak-motor corner it drops to 50/34/54 %, because its thrust command is in the reference vehicle's
+   units and the policy has no integral action. `flight/fly.py` `CollectiveScaled` reads the command as
+   mass-normalized and rescales it to this airframe:
+   `a0' = (a0+1)·s − 1`, with `s = (T_max,ref · m) / (T_max · m_ref)`. That is what a hover-thrust
+   estimator does on PX4/ArduPilot. With it, v3 scores **100/89.5/98.0 %** nominal and
+   **100/90.2/98.0 %** pessimistic, against 100/90.6/97.3 % on the reference vehicle, so both corners
+   are within the 3-point margin. Fine-tuning was tried first and doesn't work: every run lost v3's
+   cm-level hover, including on the reference vehicle. `flight/retrain.py` records what was ruled out.
+   Firmware follow-up for neuroflight-fc: apply `s` (or a learned hover thrust) between the policy
+   output and the mixer.
 2. **PCB before fab:** the USB pair is unmatched (D+ 53 mm vs D− 21 mm), QSPI is not length-matched,
    the 5V and 3V3 feeds are thin tracks and not pours, the silkscreen needs cleanup, and the board is
    routed at the 0.1 mm/0.1 mm minimum with no margin. The router is this repo's own maze router
