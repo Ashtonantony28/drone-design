@@ -22,6 +22,8 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "layout"))
+import impedance  # noqa: E402  (layout/impedance.py: stackup, pair impedance)
+import netlen  # noqa: E402  (layout/netlen.py: pad-to-pad copper length)
 import widen  # noqa: E402  (layout/widen.py: copper spacing statistics)
 
 BOARD = HERE / "boards/nf_fc/layout/nf_fc/nf_fc.kicad_pcb"
@@ -46,6 +48,9 @@ TRACK_MIN = 0.1            # DESIGN.md 1: nothing below the fab's minimum
 TRACK_STD = 0.127          # width and space everywhere the layout has room for it
 NARROW_SHARE_MAX = 0.18    # share of track length narrower than TRACK_STD (0.78 before layout/widen.py)
 TIGHT_SHARE_MAX = 0.10     # share of track length with foreign copper nearer than TRACK_STD
+QSPI_NETS = ("QSPI_CLK", "QSPI_NCS", "QSPI_IO0", "QSPI_IO1", "QSPI_IO2", "QSPI_IO3")
+QSPI_SPREAD_MAX = 4.0      # DESIGN.md 5.7: the 6 lines matched to +-2 mm
+FLASH = "FLASH.U5.X"
 # L4 power pours: zone name -> (net, smallest filled area in mm2)
 POWER_POURS = {"L4_VBAT_IN": ("VBAT", 20.0), "L4_VBAT_HF": ("VBAT", 4.0), "L4_5V_OUT": ("5V", 9.0)}
 
@@ -427,6 +432,25 @@ def test_drc_clean():
     assert not r.get("unconnected_items"), "%d unconnected, first: %s" % (len(r["unconnected_items"]), r["unconnected_items"][:3])
 
 
+def copper_z():
+    """z of each copper layer (mm) from the board's stackup: a via counts with its height."""
+    return impedance.copper_spans(impedance.read_stackup(BOARD))
+
+
+def qspi_lengths(lay):
+    """Copper length MCU pad -> flash pad of each QSPI line (shortest path: pull-up stubs do not count)."""
+    z = copper_z()
+    return {n: list(netlen.lengths(n, lay.d, (MCU, None), [(FLASH, None)], z).values())[0] for n in QSPI_NETS}
+
+
+def test_qspi_length_matched(lay):
+    """DESIGN.md 5.7: the six QSPI lines are length-matched to +-2 mm (MCU pad to flash pad, vias included)."""
+    L = qspi_lengths(lay)
+    assert all(v is not None for v in L.values()), L
+    spread = max(L.values()) - min(L.values())
+    assert spread <= QSPI_SPREAD_MAX, ({n: round(v, 2) for n, v in L.items()}, round(spread, 2))
+
+
 def test_track_and_space_margin(lay):
     """No track under 0.1 mm; width and space of 0.127 mm or more except in the listed share
     of the track length (the MCU and FPGA escapes; `python check_layout.py` prints where)."""
@@ -468,14 +492,11 @@ if __name__ == "__main__":
     print("island edge to DShot copper %.2f mm (informative)" % min(lay_.dist(t, isl) for t in dshot))
     for net, (length, n) in dshot_lengths(lay_).items():
         print(net, "%.2f mm in %d segments" % (length, n))
-    # informative: DESIGN.md 5.6/5.8 ask for QSPI matched to +-2 mm and a short USB pair;
-    # the maze router does not tune lengths, so the numbers are reported, not asserted
+    q = qspi_lengths(lay_)
+    print("QSPI MCU-to-flash lengths:", ", ".join("%s %.2f" % (n[5:], v) for n, v in q.items()), "-> spread %.2f mm" % (max(q.values()) - min(q.values())))
+
     def net_len(net):
         return sum(t["len"] for t in lay_.tracks if t["net"] == net)
-    q = {n: net_len(n) for n in sorted({t["net"] for t in lay_.tracks}) if n.startswith("QSPI_")}
-    if q:
-        print("QSPI lengths (informative):", ", ".join("%s %.1f" % (n[5:], v) for n, v in q.items()),
-              "-> spread %.1f mm" % (max(q.values()) - min(q.values())))
     print("USB lengths (informative): D+ %.1f mm, D- %.1f mm" % (net_len("USB_P"), net_len("USB_N")))
     print("track length on In2.Cu (L3): %.1f mm in %d segments" % (
         sum(t["len"] for t in lay_.tracks if t["layer"] == "In2.Cu"), sum(1 for t in lay_.tracks if t["layer"] == "In2.Cu")))
