@@ -4,8 +4,9 @@
 #   dump    geometry JSON for plot.py / check_layout.py  -> layout/build/board.json
 #   plot    review pictures                              -> layout/build/view_{top,bottom}.png
 #   pre     scripted copper: decoupling links, DShot escapes, plane vias, stitching (preroute.py)
-#   auto    maze router for everything else (autoroute.py, pure Python, ~10 min)
-#   finish  L1/L4 pours, zone refill
+#   auto    maze router for everything else (autoroute.py, pure Python, ~5 min), then widen.py:
+#           tracks off the 0.1 mm minimum and power tracks as wide as the room allows
+#   finish  L1/L4 ground pours, L4 power pours, dangling vias out, silkscreen clean-up (silk.py), zone refill
 #   drc     kicad-cli DRC                                -> layout/build/drc.json (+ summary)
 #   fab     gerbers, drill, pick-and-place, STEP         -> fab/
 #   all     place dump pre auto finish dump drc plot
@@ -32,8 +33,9 @@ for step in $steps; do
     pre) $PY layout/preroute.py "$OUT/board.json" "$OUT/preroute.json" &&
         kicad python3 layout/route.py apply "$BOARD" "$OUT/preroute.json" locked &&
         kicad python3 layout/dump.py "$BOARD" "$OUT/pre.json" && cp "$BOARD" "$OUT/prerouted.kicad_pcb" ;;
-    auto) $PY layout/autoroute.py "$OUT/pre.json" "$OUT/autoroute.json" && cp "$OUT/prerouted.kicad_pcb" "$BOARD" &&
-        kicad python3 layout/route.py apply "$BOARD" "$OUT/autoroute.json" unlocked ;;
+    auto) $PY layout/autoroute.py "$OUT/pre.json" "$OUT/autoroute.json" &&
+        $PY layout/widen.py "$OUT/pre.json" "$OUT/autoroute.json" "$OUT/routed.json" && cp "$OUT/prerouted.kicad_pcb" "$BOARD" &&
+        kicad python3 layout/route.py apply "$BOARD" "$OUT/routed.json" unlocked ;;
     finish) kicad python3 layout/route.py finish "$BOARD" ;;
     drc) kicad kicad-cli pcb drc --format json --severity-all --units mm -o "$OUT/drc.json" "$BOARD" >/dev/null &&
         $PY layout/drc_summary.py "$OUT/drc.json" ;;

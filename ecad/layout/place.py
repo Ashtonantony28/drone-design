@@ -223,6 +223,8 @@ DECAP_GAP = 1.32  # pad end to capacitor centre: clears the two courtyards
 # Nets routed as wide tracks (Zener netclass "Power")
 POWER_NETS = ["5V", "VBUS", "VBAT", "PWR.IMU_LDO_IN"]
 
+LIBRARY_CHECKS = ("lib_footprint_issues", "lib_footprint_mismatch")
+
 # Reference designators shown on silkscreen; everything else is on the fab layer
 SILK_REFS = ("J", "TP", "SW", "U1")
 
@@ -483,6 +485,11 @@ def assign_netclasses(pro_path):
     patterns = pro["net_settings"].setdefault("netclass_patterns", [])
     patterns[:] = [p for p in patterns if p.get("netclass") != "Power"]
     patterns.extend({"netclass": "Power", "pattern": n} for n in POWER_NETS)
+    # The footprints come from the Zener package cache, not from a KiCad library table, and
+    # silk.py trims their silkscreen on purpose: the two library comparisons say nothing here.
+    severities = pro["board"]["design_settings"].setdefault("rule_severities", {})
+    for check in LIBRARY_CHECKS:
+        severities[check] = "ignore"
     with open(pro_path, "w") as f:
         json.dump(pro, f, indent=2)
         f.write("\n")

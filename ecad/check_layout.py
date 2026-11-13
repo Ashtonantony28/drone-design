@@ -15,11 +15,15 @@ ours.  Never loosen one to make a layout pass: fix the layout or report it.
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "layout"))
+import widen  # noqa: E402  (layout/widen.py: copper spacing statistics)
+
 BOARD = HERE / "boards/nf_fc/layout/nf_fc/nf_fc.kicad_pcb"
 DUMP = HERE / "layout/build/board.json"
 DRC = HERE / "layout/build/drc.json"
@@ -37,6 +41,13 @@ IC_DECAP_MAX = 2.0         # ours: other ICs, capacitor pad to supply pin
 DSHOT_MAX_LEN = 25.0       # DESIGN.md 5.5
 STITCH_PITCH_MAX = 4.0     # DESIGN.md 5.4 says "every ~3 mm"; we allow up to 4 mm
 TOL = 0.011                # mm, coordinate rounding
+# Pre-fabrication margins (ours; JLC's standard capability is 0.127 mm, 0.1 mm is its limit)
+TRACK_MIN = 0.1            # DESIGN.md 1: nothing below the fab's minimum
+TRACK_STD = 0.127          # width and space everywhere the layout has room for it
+NARROW_SHARE_MAX = 0.18    # share of track length narrower than TRACK_STD (0.78 before layout/widen.py)
+TIGHT_SHARE_MAX = 0.10     # share of track length with foreign copper nearer than TRACK_STD
+# L4 power pours: zone name -> (net, smallest filled area in mm2)
+POWER_POURS = {"L4_VBAT_IN": ("VBAT", 20.0), "L4_VBAT_HF": ("VBAT", 4.0), "L4_5V_OUT": ("5V", 9.0)}
 
 IMUS = ("IMU.U2.X", "IMU.U3.X")
 BUCK_SW_NET = "PWR.BUCK_SW"
@@ -416,6 +427,37 @@ def test_drc_clean():
     assert not r.get("unconnected_items"), "%d unconnected, first: %s" % (len(r["unconnected_items"]), r["unconnected_items"][:3])
 
 
+def test_track_and_space_margin(lay):
+    """No track under 0.1 mm; width and space of 0.127 mm or more except in the listed share
+    of the track length (the MCU and FPGA escapes; `python check_layout.py` prints where)."""
+    assert min(t["width"] for t in lay.tracks) >= TRACK_MIN - 1e-9
+    s = widen.stats(lay.d)
+    assert s["narrow"] <= NARROW_SHARE_MAX, "%.1f %% of the track length is under %.3f mm wide" % (100 * s["narrow"], TRACK_STD)
+    assert s["tight_space"] <= TIGHT_SHARE_MAX, "%.1f %% of the track length has less than %.3f mm space" % (100 * s["tight_space"], TRACK_STD)
+
+
+def test_power_pours(lay):
+    """VBAT input and buck output are poured on L4; every pour is filled and in one piece per pad group."""
+    for name, (net, area) in POWER_POURS.items():
+        z = lay.zones.get(name)
+        assert z is not None, name
+        assert z["net"] == net and z["layers"] == ["B.Cu"], (name, z["net"], z["layers"])
+        assert z["filled"]["B.Cu"]["area"] >= area, (name, z["filled"])
+        # at least two pads of the net sit inside the pour outline: it joins parts, it is not a patch
+        inside = [p for f in lay.d["footprints"] for p in f["pads"] if p["net"] == net and "B" in p["layers"] and point_in_poly(p["at"], z["outline"])]
+        assert len(inside) >= 2, (name, len(inside))
+
+
+def test_silkscreen_and_vias_clean():
+    """No silkscreen warning (overlap, over a pad, off the edge) and no dangling via or track end."""
+    r = json.loads(DRC.read_text())
+    kinds = {}
+    for v in r.get("violations", []):
+        kinds[v["type"]] = kinds.get(v["type"], 0) + 1
+    bad = {k: n for k, n in kinds.items() if k.startswith("silk") or k in ("via_dangling", "track_dangling")}
+    assert not bad, bad
+
+
 if __name__ == "__main__":
     lay_ = Layout(json.loads(DUMP.read_text()))
     isl = lay_.island()
@@ -437,4 +479,8 @@ if __name__ == "__main__":
     print("USB lengths (informative): D+ %.1f mm, D- %.1f mm" % (net_len("USB_P"), net_len("USB_N")))
     print("track length on In2.Cu (L3): %.1f mm in %d segments" % (
         sum(t["len"] for t in lay_.tracks if t["layer"] == "In2.Cu"), sum(1 for t in lay_.tracks if t["layer"] == "In2.Cu")))
+    widen.report(widen.stats(lay_.d))
+    for z in lay_.d["zones"]:
+        if z["name"] in POWER_POURS:
+            print("%s (%s): %.1f mm2 filled" % (z["name"], z["net"], z["filled"]["B.Cu"]["area"]))
     raise SystemExit(pytest.main([os.path.abspath(__file__), "-q"]))
