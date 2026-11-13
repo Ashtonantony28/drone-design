@@ -172,21 +172,30 @@ PLANE_NETS = ("GND", "3V3_D", "3V3_IMU")
 def prune_vias(board, tracks, footprints):
     """Take out vias that ended up with copper on one layer only (an escape via scripted by
     preroute.py that the maze router then did not use): they would only be a drill hit."""
-    ends = {}
+    segs = {}
     for t in tracks:
         if t.Type() != pcbnew.PCB_VIA_T:
-            for p in (t.GetStart(), t.GetEnd()):
-                ends.setdefault(t.GetNetCode(), []).append((p.x, p.y, t.GetLayer()))
+            a, b = t.GetStart(), t.GetEnd()
+            segs.setdefault(t.GetNetCode(), []).append((a.x, a.y, b.x, b.y, t.GetLayer()))
     pads = {}
     for fp in footprints:
         for p in fp.Pads():
             pads.setdefault(p.GetNetCode(), []).append(p)
+
+    def touches(c, r, seg):
+        # a track may pass over the via without ending on it (a T junction)
+        ax, ay, bx, by, _ = seg
+        vx, vy = bx - ax, by - ay
+        L2 = vx * vx + vy * vy
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((c.x - ax) * vx + (c.y - ay) * vy) / L2))
+        return (ax + t * vx - c.x) ** 2 + (ay + t * vy - c.y) ** 2 <= r * r
+
     gone = []
     for v in tracks:
         if v.Type() != pcbnew.PCB_VIA_T or v.GetNetname() in PLANE_NETS:
             continue
         c, r = v.GetPosition(), v.GetWidth(pcbnew.F_Cu) / 2
-        layers = {layer for x, y, layer in ends.get(v.GetNetCode(), []) if (x - c.x) ** 2 + (y - c.y) ** 2 <= r * r}
+        layers = {seg[4] for seg in segs.get(v.GetNetCode(), []) if touches(c, r, seg)}
         for p in pads.get(v.GetNetCode(), []):
             if p.GetBoundingBox().Contains(c):
                 layers.update(l for l in (pcbnew.F_Cu, pcbnew.B_Cu) if p.IsOnLayer(l))
