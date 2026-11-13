@@ -9,6 +9,7 @@ locked copper before the Specctra export:
 
   1. MCU supply pin -> its decoupling capacitor, straight          (DESIGN.md 5.1)
   2. DShot: MCU pin -> via under the MCU -> 33R resistor on L4      (DESIGN.md 5.5)
+     USB: D+/D- as a 90 ohm pair on L1, length-matched             (DESIGN.md 5.8)
      switch node: buck SW pad -> inductor; straight links between facing pads of one net
   3. one via beside every pad on a plane net (GND on L2; 3V3_D,
      3V3_IMU on L3 where their pour is under the pad)             (DESIGN.md 5.1/5.4)
@@ -61,7 +62,19 @@ MANUAL = [
     ("MCU.HSE_OUT", "F", 0.15, [(2.0, -6.6), (2.0, -7.2), (1.65, -7.6), (1.65, -11.4), (1.25, -11.9)]),
     # switch node to the bootstrap capacitor: out of pin 3, down between pin 4 and the input capacitor
     ("PWR.BUCK_SW", "B", 0.2, [(9.7, 4.475), (10.0, 4.475), (10.1, 4.6), (10.1, 5.0), (10.45, 5.45)]),
+    # VBAT test point: straight up to the input capacitor, between TP9 and the feedback parts
+    # (the USB pair crosses the top side here, so this connection has L4 only)
+    ("VBAT", "B", 0.4, [(5.2, 9.6), (5.0, 9.3), (5.0, 5.45)]),
 ]
+# USB D+/D-: a 90 ohm edge-coupled pair on L1 over the unbroken L2 ground.  Width and gap come
+# from layout/impedance.py (field solution on the board's own stackup): 0.24 mm / 0.15 mm ->
+# 89.8 ohm; the gap is drawn 5 um over the 0.15 mm clearance of the net class -> 90.3 ohm.
+USB = {"P": "USB_P", "N": "USB_N", "width": 0.24, "gap": 0.155, "neck": 0.2,
+       "esd": "CONN.U9.X", "conn": "CONN.J1.X",
+       "level": 6.5,        # y of the pair's run under the MCU: the bottom pin row keeps a row of escape vias below it
+       "knee": 0.6,         # size of the 45 degree corner from the pins into that run
+       "leave": -5.0,       # x where the pair ends, short of the connector's vias
+       "bump": 0.6, "bumps": 3, "bump_from": 4.9}   # length compensation on the shorter line
 STITCH_PITCH = 3.0
 STITCH_INSET = 0.9
 # exposed pads that take vias in the pad: the DNP FPGA's ground pad (no other
@@ -166,7 +179,7 @@ class Router:
         poly = self.zones[zone]["outline"]
         return point_in_poly(c, poly) and poly_edge_dist(c, poly) >= PLANE_MARGIN
 
-    def via_ok(self, c, net, dia=VIA_D, in_pad=None):
+    def via_ok(self, c, net, dia=VIA_D, in_pad=None, lanes=True):
         r = dia / 2
         if not self.on_board(c, EDGE + r):
             return False
@@ -184,7 +197,7 @@ class Router:
                 need = r + clr_for(net, p["net"])
             if d < need:
                 return False
-        for lnet, _, a, b in self.lanes:
+        for lnet, _, a, b in self.lanes if lanes else ():
             if lnet != net and abs(c[0] - a[0]) < 3 and abs(c[1] - a[1]) < 3 and point_seg(c, a, b) < LANE_VIA:
                 return False
         for v in self.vias:
@@ -316,6 +329,141 @@ class Router:
                 self.add_track(a, b, w, "B", SW_NET)
                 return
         self.log.append("switch-node link failed")
+
+    # ---- 2e. USB: a coupled pair, MCU -> connector (DESIGN.md 5.8) -----------------
+    def usb(self):
+        """D+/D- as one pair on L1 from the MCU pins to the USB-C connector on L4.
+
+        The pins are in the bottom row; the connector pads are fenced in on L4 by its
+        shield pins and its own VBUS/GND pads, and on L1 the strip below the MCU is cut
+        by a shield pin.  So the pair leaves the pins inwards, runs under the MCU along
+        y = level, and leaves through the corner between the left and the bottom pin row
+        (1.0 mm of room on the diagonal; the pair needs 0.94 mm).  At the connector the
+        two contacts of each line (A6/B6, A7/B7) are joined by a link, one above the pad
+        row and one below it, each with its via in the middle of the link, so both plug
+        orientations see the same lengths.  The line that goes below the row has the
+        longer way; the other gets the difference back as bumps in the straight run
+        under the MCU.  The ESD array (place.py turns it so that no pin is fenced in)
+        taps one line from its link and the other from a via beside the pair."""
+        P, N, w, neck = USB["P"], USB["N"], USB["width"], USB["neck"]
+        h = (w + USB["gap"]) / 2
+        mp, mn = self.pad(MCU, net=P), self.pad(MCU, net=N)
+        pads = {n: sorted((p for p in self.pads if p["path"] == USB["conn"] and p["net"] == n), key=lambda p: p["at"][0]) for n in (P, N)}
+        esd = {n: sorted((p for p in self.pads if p["path"] == USB["esd"] and p["net"] == n), key=lambda p: -p["at"][1]) for n in (P, N)}
+        if not (len(pads[P]) == len(pads[N]) == 2 and len(esd[P]) == len(esd[N]) == 2):
+            self.log.append("USB pair: unexpected pads, left to the autorouter")
+            return
+        # the corner of the MCU the pair leaves through: between the last pad of the left row and the first of the bottom row
+        mcu = [p for p in self.pads if p["path"] == MCU]
+        left = max((p for p in mcu if p["box"][2] < mp["box"][0] and p["box"][2] - p["box"][0] > p["box"][3] - p["box"][1] and p["at"][0] < self.fp[MCU]["at"][0]), key=lambda p: p["at"][1])
+        row = min((p for p in mcu if abs(p["at"][1] - mp["at"][1]) < 1e-6), key=lambda p: p["at"][0])
+        diag = (left["box"][2] + row["box"][0]) / 2 + (left["box"][3] + row["box"][1]) / 2     # x + y on the centre line
+        x0 = (mp["at"][0] + mn["at"][0]) / 2
+        y_in = mp["box"][1] - 0.425
+        y0, k = USB["level"], USB["knee"]
+        centre = [(x0, y_in), (x0, y0 + k), (x0 - k, y0), (diag - y0, y0), (USB["leave"], diag - USB["leave"])]
+
+        def offset(pts, d):
+            out = []
+            lines = []
+            for a, b in zip(pts, pts[1:]):
+                L = math.dist(a, b)
+                ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+                lines.append(((a[0] + d * uy, a[1] - d * ux), (ux, uy)))
+            out.append(lines[0][0])
+            for (p1, u1), (p2, u2) in zip(lines, lines[1:]):
+                den = u1[0] * u2[1] - u1[1] * u2[0]
+                t = ((p2[0] - p1[0]) * u2[1] - (p2[1] - p1[1]) * u2[0]) / den
+                out.append((p1[0] + t * u1[0], p1[1] + t * u1[1]))
+            (p, u), a, b = lines[-1], pts[-2], pts[-1]
+            out.append((p[0] + u[0] * math.dist(a, b), p[1] + u[1] * math.dist(a, b)))
+            return out
+
+        side = 1 if mn["at"][0] < mp["at"][0] else -1          # D- on the left of the direction of travel
+        lines = {N: offset(centre, side * h), P: offset(centre, -side * h)}
+        # "near" is the line on the connector's side of the diagonal: it ends at a via above the
+        # pad row; "far" goes on past the row.  The ESD array has the near line's pins towards J1.
+        near = min((P, N), key=lambda n: lines[n][-1][0] + lines[n][-1][1])
+        far = N if near == P else P
+        if min(p["at"][1] for p in esd[near]) < max(p["at"][1] for p in esd[far]):
+            self.log.append("USB pair: the ESD array does not face the connector with %s, left to the autorouter" % near)
+            return
+        top = pads[near][0]["box"][1]
+        yc = pads[near][0]["at"][1]
+        y_n = top - 0.15 - VIA_D / 2 - 0.07
+        y_s = yc + (yc - y_n)
+        v_near = ((pads[near][0]["at"][0] + pads[near][1]["at"][0]) / 2, y_n)
+        v_far = ((pads[far][0]["at"][0] + pads[far][1]["at"][0]) / 2, y_s)
+        ln, lf = lines[near], lines[far]
+        c_near, c_far = ln[-1][0] + ln[-1][1], lf[-1][0] + lf[-1][1]
+        ln += [(v_near[0] + 0.15, c_near - v_near[0] - 0.15), v_near]
+        x_f = v_far[0] + 0.5                 # the far line turns south here, clear of the near via
+        lf += [(x_f, c_far - x_f), (x_f, y_s - 0.5), v_far]
+        for n, m in ((P, mp), (N, mn)):
+            lines[n][0:0] = [tuple(m["at"]), (m["at"][0], m["box"][1] - 0.175)]
+
+        def length(pts):
+            return sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+
+        # length compensation: rectangular bumps in the straight run of the shorter line, away from its partner
+        short = min((ln, lf), key=length)
+        need = abs(length(ln) - length(lf))
+        i = next(i for i, (a, b) in enumerate(zip(short, short[1:])) if abs(a[1] - b[1]) < 1e-9 and abs(a[0] - b[0]) > 3)
+        ya = short[i][1]
+        away = 1 if ya > y0 else -1
+        depth = need / (2 * USB["bumps"])
+        bump = []
+        for j in range(USB["bumps"]):
+            xs = USB["bump_from"] - 2 * j * USB["bump"]
+            bump += [(xs, ya), (xs, ya + away * depth), (xs - USB["bump"], ya + away * depth), (xs - USB["bump"], ya)]
+        short[i + 1:i + 1] = bump
+        skew = abs(length(ln) - length(lf))
+        # L4: the two links at the connector, the links between the array's pin pairs, the taps
+        b_tracks = []
+        for net, v in ((near, v_near), (far, v_far)):
+            for p in pads[net]:
+                b_tracks.append((net, [tuple(p["at"]), (p["at"][0], v[1]), v], neck))
+            a, b = sorted(esd[net], key=lambda p: p["at"][0])
+            b_tracks.append((net, [(a["box"][2] - 0.15, a["at"][1]), (b["box"][0] + 0.15, b["at"][1])], neck))
+        b_tracks.append((near, [v_near, (v_near[0], esd[near][0]["at"][1])], neck))
+        # far line: a via beside it, on the side away from its partner, in the run under the MCU
+        f_tracks = [(near, ln, w), (far, lf, w)]
+        k_far = next(i for i, (a, b) in enumerate(zip(lf, lf[1:])) if abs(a[1] - b[1]) < 1e-9 and abs(a[0] - b[0]) > 3)
+        y_far = lf[k_far][1]
+        out = 1 if y_far > y0 else -1
+        e = max(esd[far], key=lambda p: p["at"][0])
+        vt = None
+        for step in range(40):
+            c = (e["box"][2] + 1.2 + 0.1 * step, y_far + out * 0.15)
+            arm = [c, (c[0] - 0.45, e["at"][1] + 0.45), (e["box"][2] - 0.15, e["at"][1])]
+            if c[0] < min(lf[k_far][0], lf[k_far + 1][0]) + 0.3:
+                continue
+            if self.via_ok(c, far) and all(self.track_ok(a, b, neck, "B", far, lanes=False) for a, b in zip(arm, arm[1:])):
+                vt = c
+                f_tracks.append((far, [c, (c[0], y_far)], neck))
+                b_tracks.append((far, arm, neck))
+                break
+        # every piece is tested against the copper laid so far (not against its partner: the gap is by construction).
+        # The two vias sit in the escape lane of the partner's pads on purpose: those pads are joined on the other side.
+        ok = self.via_ok(v_near, near, lanes=False) and self.via_ok(v_far, far, lanes=False)
+        for layer, group in (("F", f_tracks), ("B", b_tracks)):
+            for net, pts, width in group:
+                for a, b in zip(pts, pts[1:]):
+                    if not self.track_ok(a, b, width, layer, net, lanes=False):
+                        self.log.append("USB pair blocked: %s on %s from (%.2f, %.2f) to (%.2f, %.2f)" % (net, layer, a[0], a[1], b[0], b[1]))
+                        ok = False
+        if not ok:
+            self.log.append("USB pair not routed: left to the autorouter")
+            return
+        for layer, group in (("F", f_tracks), ("B", b_tracks)):
+            for net, pts, width in group:
+                for a, b in zip(pts, pts[1:]):
+                    self.add_track(a, b, width, layer, net)
+        for net, v in ((near, v_near), (far, v_far)) + (((far, vt),) if vt else ()):
+            self.add_via(v, net)
+            self.vias[-1]["shared"] = False
+        self.log.append("USB pair: %.2f mm on L1, %s %.3f mm, %s %.3f mm to the vias (skew %.3f mm), %d bumps of %.2f mm%s" % (
+            length(centre), near, length(ln), far, length(lf), skew, USB["bumps"], depth, "" if vt else "; no room for the ESD via of " + far))
 
     def manual(self):
         for net, layer, width, pts in MANUAL:
@@ -620,6 +768,7 @@ def main(src, dst):
     linked = r.mcu_decaps()
     r.dshot()
     r.switch_node()
+    r.usb()
     r.l3_links()
     r.manual()
     links = r.short_links()

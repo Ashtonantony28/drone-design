@@ -21,13 +21,43 @@ import json
 import os
 import sys
 
+import torch
 import yaml
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NF = os.environ.get("NEUROFLIGHT_FC", os.path.join(os.path.dirname(ROOT), "neuroflight-fc"))
 POLICY = os.path.join(NF, "train", "policies", "hover_ctbr_v3.nfpol.json")
 
-FT_POLICY = os.path.join(ROOT, "runs", "nf3d_ft", "policy.nfpol.json")
+
+
+class CollectiveScaled:
+    """hover_ctbr_v3 with its collective-thrust output calibrated to this airframe.
+
+    The policy was trained on the reference vehicle: its thrust action a0 means
+    F = (a0+1)/2 * 4 * thrust_max_ref newtons for mass_ref. Read as a mass-normalized
+    command, the same intent on this airframe is F * mass/mass_ref. The firmware maps
+    a0 with the airframe's own thrust_max, so the equivalent action is
+        a0' = (a0 + 1) * s - 1,   s = (thrust_max_ref * mass) / (thrust_max * mass_ref)
+    and the previous-action observation (obs 15) is mapped back so the policy keeps
+    seeing its own outputs. This is the job a hover-thrust estimator does on PX4 /
+    ArduPilot (MPC_THR_HOVER / MOT_THST_HOVER); here s comes from the vehicle model.
+    No retraining: the fine-tunes in flight/retrain.py all lost hover precision.
+    """
+
+    def __init__(self, pol, nom: dict, ref: dict):
+        self.pol = pol
+        self.s = (ref["thrust_max"] * nom["mass"]) / (nom["thrust_max"] * ref["mass"])
+
+    def reset(self, idx=None):
+        self.pol.reset(idx)
+
+    def __call__(self, obs):
+        o = obs.clone()
+        o[:, 15] = (o[:, 15] + 1) / self.s - 1
+        o[:, 15] = torch.where(obs[:, 15] == 0, obs[:, 15], o[:, 15])  # zeros at reset/engage stay zero
+        a = self.pol(o).clone()
+        a[:, 0] = ((a[:, 0] + 1) * self.s - 1).clamp(-1, 1)
+        return a
 
 # Acceptance = non-inferiority against the vehicle neuroflight-fc was developed
 # on (its own config/vehicle_nominal.yaml), evaluated the same way in the same
@@ -45,7 +75,7 @@ GATES = {"PID": "PID"}
 # gated: the policy is vehicle-specific and owned by neuroflight-fc. A failure
 # here means "this airframe needs its own trained policy", not "the airframe
 # cannot fly".
-ADVISORY = {"v3": "v3", "nf3d": "v3"}
+ADVISORY = {"v3": "v3", "v3cal": "v3"}
 SCENARIOS = ("hover_1m", "tilt_60", "throw", "upside_down")
 
 
@@ -87,12 +117,8 @@ def main(argv=None):
 
     nf_nom = load_nominal()
     pol = ev.TorchPolicy(POLICY)
-    ctrls = {"v3": lambda n, nom: pol, "PID": ev.make_pid}
-    if os.path.exists(FT_POLICY):
-        ft = ev.TorchPolicy(FT_POLICY)
-        ctrls["nf3d"] = lambda n, nom: ft
-    else:
-        print("note: no fine-tuned policy yet (python -m flight.retrain); gating PID only")
+    ctrls = {"v3": lambda n, nom: pol, "PID": ev.make_pid,
+             "v3cal": lambda n, nom: CollectiveScaled(pol, nom, nf_nom)}
     vehicles, results = {}, {}
     for corner in ("reference", "nominal", "pessimistic"):
         veh = copy.deepcopy(nf_nom) if corner == "reference" else cad_vehicle(nf_nom, corner)
@@ -129,7 +155,7 @@ def finish(ev, vehicles, results):
     report = {"failures": failures, "policy_findings": findings, "vehicles": vehicles, "results": results}
     md = ["# Flight validation (neuroflight-fc simulator, firmware sensing path `fw3`)", "",
           "Controllers: `PID` = neuroflight-fc cascaded fallback (always on board), `v3` = hover_ctbr_v3 as "
-          "trained on the reference vehicle, `nf3d` = v3 fine-tuned on this airframe (flight/retrain.py).", "",
+          "trained on the reference vehicle, `v3cal` = the same v3 weights with the collective-thrust output scaled to this airframe's mass and thrust (flight/fly.py CollectiveScaled, no retraining).", "",
           f"**Airframe gate:** PID success on {', '.join(GATED)} at most {MARGIN*100:.0f} points below the same "
           "controller on the reference vehicle (neuroflight-fc config/vehicle_nominal.yaml), for both the nominal "
           "and the pessimistic NF-3D. **Learned policies:** scored the same way, reported as findings.", ""]

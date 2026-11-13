@@ -114,13 +114,13 @@ PARTS = {
     "CONN.J2.X": (5.7, 14.55, 180, "B"),
     "CONN.J7.X": (-13.8, 5.0, 90, "B"),
     # --- USB ---
-    "CONN.U9.X": (-6.0, 7.2, 90, "B"),
+    "CONN.U9.X": (-6.0, 7.2, 0, "B"),      # GND pin to the west, VBUS to the east, D+ pins towards J1: the USB pair fences no pin in
     "CONN.C_U9.C": (-8.8, 6.3, 90, "B"),
-    "CONN.R_CC2.R": (-9.0, 8.4, 0, "B"),
+    "CONN.R_CC2.R": (-9.1, 8.4, 0, "B"),
     "CONN.R_CC1.R": (0.9, 10.0, 0, "B"),
-    "PWR.D1.X": (-1.8, 7.9, 0, "B"),
-    "SENSE.R_VBUS_TOP.R": (1.6, 7.0, 0, "B"),
-    "SENSE.R_VBUS_BOT.R": (1.6, 8.1, 0, "B"),
+    "PWR.D1.X": (-1.5, 7.9, 0, "B"),
+    "SENSE.R_VBUS_TOP.R": (1.9, 7.0, 0, "B"),
+    "SENSE.R_VBUS_BOT.R": (1.9, 8.1, 0, "B"),
     # --- aux series / pull-ups ---
     "CONN.R_AUX_TX.R": (-9.0, 3.2, 0, "B"),
     "CONN.R_AUX_RX.R": (-9.0, 4.3, 0, "B"),
@@ -187,7 +187,7 @@ PARTS = {
     "TP7.TP": (1.9, 1.6, 0, "B"),  # GND near TP2
     "TP15.TP": (-10.6, -15.9, 0, "B"),  # GND near TP4
     "PWR.TP8.TP": (5.15, -2.08, 0, "B"),  # buck SW
-    "TP9.TP": (3.9, 7.1, 0, "B"),  # VBAT_SENSE
+    "TP9.TP": (4.0, 7.1, 0, "B"),  # VBAT_SENSE
     "TP10.TP": (3.45, 9.7, 0, "B"),  # MOTOR0 after series R: a branch off ESC_M1 from the east, ESC_M2 passes below it
     "TP11.TP": (-9.0, 0.3, 0, "B"),  # IMUA_INT1
     "TP12.TP": (0.1, 5.3, 0, "B"),  # IMUB_INT1
@@ -222,6 +222,8 @@ DECAP_GAP = 1.32  # pad end to capacitor centre: clears the two courtyards
 
 # Nets routed as wide tracks (Zener netclass "Power")
 POWER_NETS = ["5V", "VBUS", "VBAT", "PWR.IMU_LDO_IN"]
+
+LIBRARY_CHECKS = ("lib_footprint_issues", "lib_footprint_mismatch")
 
 # Reference designators shown on silkscreen; everything else is on the fab layer
 SILK_REFS = ("J", "TP", "SW", "U1")
@@ -483,6 +485,11 @@ def assign_netclasses(pro_path):
     patterns = pro["net_settings"].setdefault("netclass_patterns", [])
     patterns[:] = [p for p in patterns if p.get("netclass") != "Power"]
     patterns.extend({"netclass": "Power", "pattern": n} for n in POWER_NETS)
+    # The footprints come from the Zener package cache, not from a KiCad library table, and
+    # silk.py trims their silkscreen on purpose: the two library comparisons say nothing here.
+    severities = pro["board"]["design_settings"].setdefault("rule_severities", {})
+    for check in LIBRARY_CHECKS:
+        severities[check] = "ignore"
     with open(pro_path, "w") as f:
         json.dump(pro, f, indent=2)
         f.write("\n")

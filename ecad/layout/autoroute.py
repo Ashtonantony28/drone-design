@@ -28,6 +28,9 @@ import time
 
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import netlen  # noqa: E402
+
 GRID = 0.1
 BOARD = 36.0
 N = int(round(BOARD / GRID)) + 1
@@ -89,6 +92,14 @@ INNER_COST = 12             # per step on L3: outer layers first, L3 "where need
 OUTER_ONLY = ("IMUA_", "IMUB_", "IMU.", "MOTOR", "ESC_M", "CONN.ESC_M", "MCU.HSE", "PWR.BUCK", "VBAT",
               "GND", "3V3_D", "3V3_IMU", "VDDA")
 
+
+# Length matching (DESIGN.md 5.7: the 6 QSPI lines to +-2 mm): after routing, the shorter lines
+# are lengthened with meanders until all lie within MATCH_WINDOW of the longest.
+MATCH = {"QSPI": (("QSPI_CLK", "QSPI_NCS", "QSPI_IO0", "QSPI_IO1", "QSPI_IO2", "QSPI_IO3"), "MCU.U1.X", "FLASH.U5.X")}
+MATCH_TRIES = 16            # detours tried per round that the plane pours do not survive
+MATCH_APART = 15            # cells: the next detour tried turns at least this far from a failed one
+MATCH_WINDOW = 2.0          # mm below the longest line (+-2 mm allows 4)
+COPPER_Z = {"F.Cu": 0.0175, "In2.Cu": 1.3332, "B.Cu": 1.5687}   # mm, JLC04161H-7628 (layout/impedance.py reads the same from the board)
 
 DSHOT_NETS = ("MOTOR", "ESC_M", "CONN.ESC_M")   # prefixes: MCU pin -> 33R -> J2
 IMU_PATHS = ("IMU.U2.X", "IMU.U3.X")
@@ -913,6 +924,273 @@ class Negotiator:
         print("plane %s: %d left open" % (net, left), flush=True)
         return left
 
+    # ---- after the board is legal: length matching -----------------------------------
+    def net_length(self, net, src, dst, conns=None):
+        """Copper length from the pad on footprint src to the pad on footprint dst (None if open)."""
+        conns = self.routes[net]["conns"] if conns is None else conns
+        data = {"footprints": self.data["footprints"],
+                "tracks": [t for t in self.data["tracks"] if t["net"] == net] + [t for c in conns for t in c["tracks"]],
+                "vias": [v for v in self.data["vias"] if v["net"] == net] + [v for c in conns for v in c["vias"]]}
+        return list(netlen.lengths(net, data, (src, None), [(dst, None)], COPPER_Z).values())[0]
+
+    def flood(self, source, fr, vi):
+        """Copper length (in 1/100 mm) from one cell to every cell it can reach, and the way back."""
+        NN = N * N
+        nl = len(LAYERS)
+        INF = 1 << 60
+        dist = [INF] * (nl * NN)
+        prev = {}
+        dist[source] = 0
+        heap = [(0, source)]
+        push, pop = heapq.heappush, heapq.heappop
+        z = [COPPER_Z[{"F": "F.Cu", "I": "In2.Cu", "B": "B.Cu"}[L]] for L in LAYERS]
+        zc = [[int(round(abs(z[a] - z[b]) * 100)) for b in range(nl)] for a in range(nl)]
+        moves = ((1, ORTH), (-1, ORTH), (N, ORTH), (-N, ORTH), (N + 1, DIAG), (N - 1, DIAG), (-N + 1, DIAG), (-N - 1, DIAG))
+        while heap:
+            g, i = pop(heap)
+            if g > dist[i]:
+                continue
+            li, r = divmod(i, NN)
+            x = r % N
+            for d, c in moves:
+                rj = r + d
+                if rj < 0 or rj >= NN:
+                    continue
+                j = i + d
+                xj = rj % N
+                if xj - x > 1 or x - xj > 1 or not fr[j]:
+                    continue
+                ng = g + c
+                if ng < dist[j]:
+                    dist[j] = ng
+                    prev[j] = i
+                    push(heap, (ng, j))
+            if vi[r]:
+                for lj in range(nl):
+                    j = lj * NN + r
+                    if lj != li and fr[j]:
+                        ng = g + zc[li][lj]
+                        if ng < dist[j]:
+                            dist[j] = ng
+                            prev[j] = i
+                            push(heap, (ng, j))
+        return dist, prev
+
+    def lengthen(self, net, src, dst, lo, hi, shorten=False, accept=None):
+        """Bring the src-dst copper length of a routed net into [lo, hi] mm by detours: a
+        stretch of the connection on the path (all of it, or a half, a quarter ...) is taken
+        out and laid again through a waypoint W, chosen so that (shortest way from its start
+        to W) + (shortest way from W to its end) has the wanted length and the two halves
+        keep clear of each other.  Where no single detour is long enough the longest that
+        fits is taken and the next stretch is tried.  Strict: every cell is free of the
+        other nets' keep-off halos, so nothing else moves."""
+        from scipy import ndimage
+        st = self.prepare(net)
+        NN = N * N
+        nl = len(LAYERS)
+        fx = self.fx
+        base = self.net_length(net, src, dst)
+        z = [COPPER_Z[{"F": "F.Cu", "I": "In2.Cu", "B": "B.Cu"}[L]] for L in LAYERS]
+        ids = [c for c in range(1, len(fx.parent)) if fx.comp_net[c] == st["nid"]]
+        INF = 1 << 60
+
+        def back(prev, i):
+            out = [i]
+            while i in prev:
+                i = prev[i]
+                out.append(i)
+            return out
+
+        def detour(conns, k, i, j, now, exact):
+            """Replace cells i..j of connection k; returns (connections, length) or None."""
+            old = conns[k]
+            path = old["cells"]
+            rest = conns[:k] + conns[k + 1:]
+            s, t = path[i], path[j]
+            ends = set()
+            for q in (path[0], path[-1]):
+                li, rr = divmod(q, NN)
+                c = int(fx.m.comp[LAYERS[li]][rr // N, rr % N])
+                if c:
+                    ends.add(fx.find(c))
+            others = [c for c in ids if fx.find(c) not in ends]
+            keep = path[:max(i - 3, 0)] + path[j + 4:]        # the part of this connection that stays
+            fr_arr = []
+            for li, L in enumerate(LAYERS):
+                own = np.isin(fx.m.comp[L], others)
+                for c in rest:
+                    for q in c["cells"]:
+                        if q // NN == li:
+                            own[(q % NN) // N, (q % NN) % N] = True
+                for q in keep:
+                    if q // NN == li:
+                        own[(q % NN) // N, (q % NN) % N] = True
+                fr_arr.append(free[li] & ~ndimage.binary_dilation(own, np.ones((5, 5), bool)))
+            v_ok = via.copy()
+            kept_vias = [path[q] % NN for q in range(1, len(path)) if path[q] // NN != path[q - 1] // NN and not (i < q <= j)]
+            for c in rest:
+                kept_vias += [cell(q["at"][1]) * N + cell(q["at"][0]) for q in c["vias"]]
+            for q in kept_vias:
+                y, x = q // N, q % N
+                yy, xx = np.ogrid[max(0, y - 6):y + 7, max(0, x - 6):x + 7]
+                v_ok[max(0, y - 6):y + 7, max(0, x - 6):x + 7] &= np.hypot(yy - y, xx - x) * GRID >= VIA_PITCH - 1e-9
+            fr = b"".join(a.astype(np.uint8).tobytes() for a in fr_arr)
+            vi = v_ok.astype(np.uint8).tobytes()
+            ds, ps = self.flood(s, fr, vi)
+            if shorten:                               # the shortest free way from s to t instead of the old one
+                if ds[t] >= INF:
+                    return
+                cells = path[:i] + back(ps, t)[::-1] + path[j + 1:]
+                vcells = [cells[q] % NN for q in range(1, len(cells)) if cells[q] // NN != cells[q - 1] // NN]
+                if any(math.hypot(a % N - b % N, a // N - b // N) * GRID < VIA_PITCH for n, b in enumerate(vcells) for a in vcells[:n]):
+                    return
+                tr, vs = self.geometry(net, st, cells)
+                new = rest + [{"tracks": tr, "vias": vs, "cells": cells}]
+                got = self.net_length(net, src, dst, new)
+                if got is not None and got <= now - 1.0:
+                    yield new, got, None
+                return
+            dt, pt = self.flood(t, fr, vi)
+            a_s, a_t = np.array(ds, dtype=np.int64), np.array(dt, dtype=np.int64)
+            total = np.where((a_s < INF) & (a_t < INF), a_s + a_t, INF)
+            piece = sum(abs(z[a // NN] - z[b // NN]) if a // NN != b // NN else GRID * (1.0 if abs(a - b) in (1, N) else math.sqrt(2))
+                        for a, b in zip(path[i:j + 1], path[i + 1:j + 1]))
+            if exact:
+                want = int(round((piece + (lo + hi) / 2 - now) * 100))
+                tol = int(round((hi - lo) / 2 * 100))
+                cand = np.flatnonzero((total < INF) & (np.abs(total - want) <= tol))
+                cand = cand[np.argsort(np.abs(total[cand] - want), kind="stable")]
+            else:
+                most = int(round((piece + hi - now) * 100))
+                cand = np.flatnonzero((total < INF) & (total <= most) & (total >= int(round((piece + 1.0) * 100))))
+                cand = cand[np.argsort(-total[cand], kind="stable")]
+            tried = 0
+            for w in cand.tolist():
+                if tried >= 1500:
+                    break
+                if a_s[w] < 100 or a_t[w] < 100:
+                    continue
+                if any(abs(w % N - b % N) <= MATCH_APART and abs(w % NN // N - b % NN // N) <= MATCH_APART for b in bad):
+                    continue                      # next to a waypoint whose detour cut a plane apart
+                tried += 1
+                leg1 = back(ps, w)[::-1]          # s ... w
+                leg2 = back(pt, w)                # w ... t
+                near = set()
+                for q in leg1[:-4]:
+                    li, rr = divmod(q, NN)
+                    y, x = rr // N, rr % N
+                    for dy in (-2, -1, 0, 1, 2):
+                        for dx in (-2, -1, 0, 1, 2):
+                            near.add(li * NN + (y + dy) * N + x + dx)
+                if any(q in near for q in leg2[4:]):
+                    continue
+                cells = path[:i] + leg1 + leg2[1:] + path[j + 1:]
+                vcells = [cells[q] % NN for q in range(1, len(cells)) if cells[q] // NN != cells[q - 1] // NN]
+                if any(math.hypot(a % N - b % N, a // N - b // N) * GRID < VIA_PITCH for n, b in enumerate(vcells) for a in vcells[:n]):
+                    continue
+                tr, vs = self.geometry(net, st, cells)
+                new = rest + [{"tracks": tr, "vias": vs, "cells": cells}]
+                got = self.net_length(net, src, dst, new)
+                if got is not None and got <= hi and (got >= lo if exact else got >= now + 0.8):
+                    yield new, got, w
+
+        r = self.routes[net]
+        conns = list(r["conns"])
+        self.stamp(net, -1)
+        free, via = [], None
+
+        def refresh():
+            nonlocal via
+            counts = [self.class_count(net, st, li) for li in range(nl)]
+            free[:] = [st["passable"][li] & (counts[li] == 0) for li in range(nl)]
+            via = st["via"] & (self.via_count(st) == 0)
+
+        budget = [MATCH_TRIES]
+        bad = []
+
+        def take(cands):
+            """The first candidate the planes survive (accept() repairs them and says whether all is joined)."""
+            for new, got, w in cands:
+                if accept is None:
+                    return new, got
+                if budget[0] <= 0:
+                    return None
+                budget[0] -= 1
+                snap = self.snapshot()
+                self.routes[net] = {"conns": new, "stamps": [], "open": r["open"]}
+                self.stamp(net)
+                ok = accept()
+                if not ok:
+                    self.restore(snap)
+                    if w is not None:
+                        bad.append(w)
+                self.stamp(net, -1)
+                refresh()
+                if ok:
+                    return new, got
+            return None
+
+        refresh()
+        now = base
+        if shorten:
+            for k in sorted(range(len(conns)), key=lambda k: -len(conns[k]["cells"])):
+                if self.net_length(net, src, dst, conns[:k] + conns[k + 1:]) is None:
+                    c = conns[k]
+                    got = take(detour(conns, k, 0, len(c["cells"]) - 1, now, True))
+                    if got:
+                        conns, now = got
+                        break
+        for _ in range(0 if shorten else 8):
+            if now >= lo:
+                break
+            budget[0] = MATCH_TRIES
+            on_path = [k for k in range(len(conns)) if self.net_length(net, src, dst, conns[:k] + conns[k + 1:]) is None]
+            if not on_path:
+                break
+            k = max(on_path, key=lambda k: len(conns[k]["cells"]))
+            n = len(conns[k]["cells"]) - 1
+            spans = [(0, n)] + [(n * a // d, n * (a + 1) // d) for d in (2, 3, 4) for a in range(d)]
+            spans = [(i, j) for i, j in spans if j - i >= 12]
+            got = None
+            for exact in (True, False):
+                for i, j in spans:
+                    got = take(detour(conns, k, i, j, now, exact))
+                    if got:
+                        break
+                if got:
+                    break
+            if not got:
+                break
+            conns, now = got
+        self.routes[net] = {"conns": conns, "stamps": [], "open": r["open"]}
+        self.stamp(net)
+        return base, now
+
+    def match_lengths(self, planes_ok=None):
+        for name, (nets, src, dst) in MATCH.items():
+            nets = [n for n in nets if n in self.routes and not self.routes[n]["open"]]
+            if not nets:
+                continue
+            L = {n: self.net_length(n, src, dst) for n in nets}
+            if any(v is None for v in L.values()):
+                print("length matching %s: not all lines are routed" % name, flush=True)
+                continue
+            before = dict(L)
+            for _ in range(3):                        # the longest lines first get the shortest way that is free now
+                n = max(nets, key=L.get)
+                got = self.lengthen(n, src, dst, 0.0, 0.0, shorten=True, accept=planes_ok)[1]
+                if got >= L[n] - 1.0:
+                    break
+                L[n] = got
+            top = max(L.values())
+            for n in sorted(nets, key=L.get):
+                if L[n] >= top - MATCH_WINDOW:
+                    continue
+                # a detour on L3 can cut a plane pour apart: such a candidate is passed over
+                L[n] = self.lengthen(n, src, dst, top - MATCH_WINDOW, top, accept=planes_ok)[1]
+            print("length matching %s: %s -> spread %.2f mm (was %.2f mm)" % (name, ", ".join("%s %.2f" % (n.split("_")[-1], L[n]) for n in nets),
+                  max(L.values()) - min(L.values()), max(before.values()) - min(before.values())), flush=True)
+
     def renegotiate(self, order, seed, iterations=RENEG_ITERATIONS, pres=RENEG_PRES):
         """Let the open connections of one net through at a price; every net keeps
         the connections that touch nobody and looks for other paths for the rest.
@@ -1050,6 +1328,17 @@ class Negotiator:
             print("rip-up round %d: %d connections open, %.0f s" % (round_no + 1, total_open(), time.time() - t0), flush=True)
             if total_open() == 0 or (not improved and round_no >= len(RENEG_SCALE) - 1):
                 break
+        if total_open() == 0 and not os.environ.get("AUTOROUTE_NO_MATCH"):
+            snap = self.snapshot()
+
+            def planes_ok():
+                repair_planes()
+                return not total_open()
+            self.match_lengths(planes_ok)
+            if not planes_ok():
+                print("length matching cut a plane apart: taken back", flush=True)
+                self.restore(snap)
+                repair_planes()
         left = {n: self.routes[n]["open"] for n in order if self.routes[n]["open"]}
         tracks = [t for n in order for c in self.routes[n]["conns"] for t in c["tracks"]]
         vias = [v for n in order for c in self.routes[n]["conns"] for v in c["vias"]]

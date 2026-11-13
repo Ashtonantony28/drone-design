@@ -15,11 +15,17 @@ ours.  Never loosen one to make a layout pass: fix the layout or report it.
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "layout"))
+import impedance  # noqa: E402  (layout/impedance.py: stackup, pair impedance)
+import netlen  # noqa: E402  (layout/netlen.py: pad-to-pad copper length)
+import widen  # noqa: E402  (layout/widen.py: copper spacing statistics)
+
 BOARD = HERE / "boards/nf_fc/layout/nf_fc/nf_fc.kicad_pcb"
 DUMP = HERE / "layout/build/board.json"
 DRC = HERE / "layout/build/drc.json"
@@ -37,6 +43,29 @@ IC_DECAP_MAX = 2.0         # ours: other ICs, capacitor pad to supply pin
 DSHOT_MAX_LEN = 25.0       # DESIGN.md 5.5
 STITCH_PITCH_MAX = 4.0     # DESIGN.md 5.4 says "every ~3 mm"; we allow up to 4 mm
 TOL = 0.011                # mm, coordinate rounding
+# Pre-fabrication margins (ours; JLC's standard capability is 0.127 mm, 0.1 mm is its limit)
+TRACK_MIN = 0.1            # DESIGN.md 1: nothing below the fab's minimum
+TRACK_STD = 0.127          # width and space everywhere the layout has room for it
+NARROW_SHARE_MAX = 0.20    # share of track length narrower than TRACK_STD (0.78 before layout/widen.py)
+TIGHT_SHARE_MAX = 0.12     # share of track length with foreign copper nearer than TRACK_STD
+# USB (DESIGN.md 5.8: 90 ohm differential pair, short)
+USB_P, USB_N, USB_CONN = "USB_P", "USB_N", "CONN.J1.X"
+USB_CONTACTS = (("A6", "A7"), ("B6", "B7"))   # D+/D- contact of each plug orientation
+USB_Z0, USB_Z_TOL = 90.0, 0.10                # ohm, +-10 % (the fab's impedance tolerance)
+USB_SKEW_MAX = 0.15                           # mm, MCU pad to connector contact, D+ against D-
+USB_LEN_MAX = 25.0                            # mm, ours ("kept short")
+USB_COUPLED_MIN = 0.60                        # share of the pair's length that runs at the calculated width and gap
+# Supply currents (DESIGN.md 3, worst case) and the track width they need for a 10 K rise
+# (IPC-2221, 35 um outer copper).  VBAT: 5 V x 0.935 A / 85 % at 6.4 V (2S, empty).
+POWER_AMPS = {"VBAT": 0.86, "5V": 0.935, "VBUS": 0.5}
+POWER_RISE = 10.0
+POWER_OUTER_MIN, POWER_INNER_MIN = 0.25, 0.3   # mm: narrowest power track on L1/L4 (35 um) and on L3 (17.5 um)
+POWER_NECK_SHARE = 0.25     # share of a power rail's track length that may be under 0.3 mm
+QSPI_NETS = ("QSPI_CLK", "QSPI_NCS", "QSPI_IO0", "QSPI_IO1", "QSPI_IO2", "QSPI_IO3")
+QSPI_SPREAD_MAX = 4.0      # DESIGN.md 5.7: the 6 lines matched to +-2 mm
+FLASH = "FLASH.U5.X"
+# L4 power pours: zone name -> (net, smallest filled area in mm2)
+POWER_POURS = {"L4_VBAT_IN": ("VBAT", 20.0), "L4_VBAT_HF": ("VBAT", 4.0), "L4_5V_OUT": ("5V", 9.0)}
 
 IMUS = ("IMU.U2.X", "IMU.U3.X")
 BUCK_SW_NET = "PWR.BUCK_SW"
@@ -416,6 +445,142 @@ def test_drc_clean():
     assert not r.get("unconnected_items"), "%d unconnected, first: %s" % (len(r["unconnected_items"]), r["unconnected_items"][:3])
 
 
+def copper_z():
+    """z of each copper layer (mm) from the board's stackup: a via counts with its height."""
+    return impedance.copper_spans(impedance.read_stackup(BOARD))
+
+
+def qspi_lengths(lay):
+    """Copper length MCU pad -> flash pad of each QSPI line (shortest path: pull-up stubs do not count)."""
+    z = copper_z()
+    return {n: list(netlen.lengths(n, lay.d, (MCU, None), [(FLASH, None)], z).values())[0] for n in QSPI_NETS}
+
+
+def test_qspi_length_matched(lay):
+    """DESIGN.md 5.7: the six QSPI lines are length-matched to +-2 mm (MCU pad to flash pad, vias included)."""
+    L = qspi_lengths(lay)
+    assert all(v is not None for v in L.values()), L
+    spread = max(L.values()) - min(L.values())
+    assert spread <= QSPI_SPREAD_MAX, ({n: round(v, 2) for n, v in L.items()}, round(spread, 2))
+
+
+def usb_lengths(lay):
+    """{(D+ contact, D- contact): (D+ length, D- length)} from the MCU pads, vias included."""
+    z = copper_z()
+    out = {}
+    for cp, cn in USB_CONTACTS:
+        lp = netlen.lengths(USB_P, lay.d, (MCU, None), [(USB_CONN, cp)], z)[(USB_CONN, cp)]
+        ln = netlen.lengths(USB_N, lay.d, (MCU, None), [(USB_CONN, cn)], z)[(USB_CONN, cn)]
+        out[(cp, cn)] = (lp, ln)
+    return out
+
+
+def usb_coupling(lay, step=0.05):
+    """(coupled length, total length, widths, gaps) of the D+ copper on its way to the connector:
+    a point is coupled when D- runs beside it on the same layer at one constant gap."""
+    tp = [t for t in lay.tracks if t["net"] == USB_P]
+    tn = [t for t in lay.tracks if t["net"] == USB_N]
+    coupled = total = 0.0
+    widths, gaps = {}, {}
+    for t in tp:
+        L = math.dist(t["start"], t["end"])
+        total += L
+        for p in seg_points(t["start"], t["end"], step)[:-1]:
+            near = [(widen.pt_seg(p, o["start"], o["end"]) - o["width"] / 2 - t["width"] / 2, o["width"]) for o in tn if o["layer"] == t["layer"]]
+            if not near:
+                continue
+            gap, ow = min(near)
+            if gap <= 0.2 and abs(ow - t["width"]) < 1e-6:
+                n = max(1, int(L / step))
+                coupled += L / n
+                widths[round(t["width"], 3)] = widths.get(round(t["width"], 3), 0.0) + L / n
+                gaps[round(gap, 3)] = gaps.get(round(gap, 3), 0.0) + L / n
+    return coupled, total, widths, gaps
+
+
+def usb_impedance(width, gap):
+    st = impedance.read_stackup(BOARD)
+    return impedance.pair(round(width, 4), round(gap, 4), st["h"], st["t"], st["er"], st["mask"], st["mask_er"], 0.007)[0]
+
+
+def test_usb_pair(lay):
+    """D+/D- run as one edge-coupled pair whose width and gap give 90 ohm +-10 % on this stackup
+    (layout/impedance.py), on L1 over the unbroken L2 plane, matched to 0.15 mm for both plug
+    orientations and short."""
+    for (cp, cn), (lp, ln) in usb_lengths(lay).items():
+        assert lp is not None and ln is not None, (cp, cn, "not routed")
+        assert abs(lp - ln) <= USB_SKEW_MAX, (cp, cn, round(lp, 3), round(ln, 3))
+        assert max(lp, ln) <= USB_LEN_MAX, (cp, cn, round(lp, 2), round(ln, 2))
+    coupled, _, widths, gaps = usb_coupling(lay)
+    total = max(lp for lp, _ in usb_lengths(lay).values())      # MCU pad to the far contact; the rest is fan-out at both ends
+    assert coupled >= USB_COUPLED_MIN * total, (round(coupled, 2), round(total, 2))
+    width = max(widths, key=widths.get)
+    gap = max(gaps, key=gaps.get)
+    assert widths[width] >= 0.95 * coupled and gaps[gap] >= 0.9 * coupled, (widths, gaps)
+    z = usb_impedance(width, gap)
+    assert abs(z - USB_Z0) <= USB_Z_TOL * USB_Z0, (width, gap, round(z, 1))
+    # the coupled part lies on L1 (reference: L2 ground, one unbroken pour - test_ground_plane_is_solid)
+    on_l1 = sum(math.dist(t["start"], t["end"]) for t in lay.tracks if t["net"] in (USB_P, USB_N) and t["layer"] == "F.Cu" and abs(t["width"] - width) < 1e-6)
+    assert on_l1 >= 2 * 0.9 * coupled, (round(on_l1, 2), round(coupled, 2))
+
+
+def ipc2221_width(amps, rise=POWER_RISE, copper_um=35.0, internal=False):
+    """Track width (mm) for a current at a temperature rise: IPC-2221 I = k dT^0.44 A^0.725 (A in mil2)."""
+    area = (amps / ((0.024 if internal else 0.048) * rise ** 0.44)) ** (1 / 0.725)
+    return area / (copper_um / 25.4) * 0.0254
+
+
+def test_power_tracks(lay):
+    """VBAT, 5V and VBUS are routed wide: no track under POWER_OUTER_MIN on the outer layers
+    (0.25 mm of 35 um copper carries 0.86 A at a 10 K rise by IPC-2221, the VBAT maximum; the
+    5V rail's 0.935 A is the sum of its branches), at most POWER_NECK_SHARE of a rail's length
+    under 0.3 mm (necks at pads), nothing under POWER_INNER_MIN on the 17.5 um L3, and the
+    rail's whole current fits the widest width it uses.  3V3_D is a pour on L3 (VBAT and 5V
+    also have the L4 pours of test_power_pours)."""
+    for net, amps in POWER_AMPS.items():
+        tracks = [t for t in lay.tracks if t["net"] == net]
+        assert tracks, net
+        length = lambda ts: sum(math.dist(t["start"], t["end"]) for t in ts)
+        thin = [(t["layer"], t["start"], t["width"]) for t in tracks if t["width"] < (POWER_INNER_MIN if t["layer"] == "In2.Cu" else POWER_OUTER_MIN) - 1e-6]
+        assert not thin, (net, thin[:5])
+        necks = length([t for t in tracks if t["width"] < 0.3 - 1e-6])
+        assert necks <= POWER_NECK_SHARE * length(tracks), (net, round(necks, 2), round(length(tracks), 2))
+        assert max(t["width"] for t in tracks if t["layer"] != "In2.Cu") >= ipc2221_width(amps) - 1e-6, (net, ipc2221_width(amps))
+    z = lay.zones["L3_3V3_D"]
+    assert z["net"] == "3V3_D" and z["filled"]["In2.Cu"]["area"] >= 550.0, z["filled"]
+
+
+def test_track_and_space_margin(lay):
+    """No track under 0.1 mm; width and space of 0.127 mm or more except in the listed share
+    of the track length (the MCU and FPGA escapes; `python check_layout.py` prints where)."""
+    assert min(t["width"] for t in lay.tracks) >= TRACK_MIN - 1e-9
+    s = widen.stats(lay.d)
+    assert s["narrow"] <= NARROW_SHARE_MAX, "%.1f %% of the track length is under %.3f mm wide" % (100 * s["narrow"], TRACK_STD)
+    assert s["tight_space"] <= TIGHT_SHARE_MAX, "%.1f %% of the track length has less than %.3f mm space" % (100 * s["tight_space"], TRACK_STD)
+
+
+def test_power_pours(lay):
+    """VBAT input and buck output are poured on L4; every pour is filled and in one piece per pad group."""
+    for name, (net, area) in POWER_POURS.items():
+        z = lay.zones.get(name)
+        assert z is not None, name
+        assert z["net"] == net and z["layers"] == ["B.Cu"], (name, z["net"], z["layers"])
+        assert z["filled"]["B.Cu"]["area"] >= area, (name, z["filled"])
+        # at least two pads of the net sit inside the pour outline: it joins parts, it is not a patch
+        inside = [p for f in lay.d["footprints"] for p in f["pads"] if p["net"] == net and "B" in p["layers"] and point_in_poly(p["at"], z["outline"])]
+        assert len(inside) >= 2, (name, len(inside))
+
+
+def test_silkscreen_and_vias_clean():
+    """No silkscreen warning (overlap, over a pad, off the edge) and no dangling via or track end."""
+    r = json.loads(DRC.read_text())
+    kinds = {}
+    for v in r.get("violations", []):
+        kinds[v["type"]] = kinds.get(v["type"], 0) + 1
+    bad = {k: n for k, n in kinds.items() if k.startswith("silk") or k in ("via_dangling", "track_dangling")}
+    assert not bad, bad
+
+
 if __name__ == "__main__":
     lay_ = Layout(json.loads(DUMP.read_text()))
     isl = lay_.island()
@@ -426,15 +591,24 @@ if __name__ == "__main__":
     print("island edge to DShot copper %.2f mm (informative)" % min(lay_.dist(t, isl) for t in dshot))
     for net, (length, n) in dshot_lengths(lay_).items():
         print(net, "%.2f mm in %d segments" % (length, n))
-    # informative: DESIGN.md 5.6/5.8 ask for QSPI matched to +-2 mm and a short USB pair;
-    # the maze router does not tune lengths, so the numbers are reported, not asserted
+    q = qspi_lengths(lay_)
+    print("QSPI MCU-to-flash lengths:", ", ".join("%s %.2f" % (n[5:], v) for n, v in q.items()), "-> spread %.2f mm" % (max(q.values()) - min(q.values())))
+
     def net_len(net):
         return sum(t["len"] for t in lay_.tracks if t["net"] == net)
-    q = {n: net_len(n) for n in sorted({t["net"] for t in lay_.tracks}) if n.startswith("QSPI_")}
-    if q:
-        print("QSPI lengths (informative):", ", ".join("%s %.1f" % (n[5:], v) for n, v in q.items()),
-              "-> spread %.1f mm" % (max(q.values()) - min(q.values())))
-    print("USB lengths (informative): D+ %.1f mm, D- %.1f mm" % (net_len("USB_P"), net_len("USB_N")))
+    for (cp, cn), (lp, ln) in usb_lengths(lay_).items():
+        print("USB %s/%s: D+ %.3f mm, D- %.3f mm, skew %.3f mm" % (cp, cn, lp, ln, abs(lp - ln)))
+    coupled, _, widths, gaps = usb_coupling(lay_)
+    total = max(lp for lp, _ in usb_lengths(lay_).values())
+    w_, g_ = max(widths, key=widths.get), max(gaps, key=gaps.get)
+    print("USB pair: %.2f of the %.2f mm from MCU to contact coupled, width %.3f mm, gap %.3f mm -> %.1f ohm differential" % (coupled, total, w_, g_, usb_impedance(w_, g_)))
+    for net, amps in POWER_AMPS.items():
+        ws = sorted({round(t["width"], 3) for t in lay_.tracks if t["net"] == net})
+        print("%s: %.2f A needs %.3f mm (outer, 10 K); track widths %s" % (net, amps, ipc2221_width(amps), ws))
     print("track length on In2.Cu (L3): %.1f mm in %d segments" % (
         sum(t["len"] for t in lay_.tracks if t["layer"] == "In2.Cu"), sum(1 for t in lay_.tracks if t["layer"] == "In2.Cu")))
+    widen.report(widen.stats(lay_.d))
+    for z in lay_.d["zones"]:
+        if z["name"] in POWER_POURS:
+            print("%s (%s): %.1f mm2 filled" % (z["name"], z["net"], z["filled"]["B.Cu"]["area"]))
     raise SystemExit(pytest.main([os.path.abspath(__file__), "-q"]))

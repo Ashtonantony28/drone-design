@@ -152,17 +152,81 @@ def import_ses(board_path, ses_path):
     print("imported %s: %d autorouted tracks and vias" % (ses_path, n))
 
 
+# Power pours on L4 (B.Cu), added after routing on top of the tracks of their net: the fill
+# keeps its clearance to everything else, so a pour can only add copper where there is room.
+# name -> (net, outline).  None of them comes near the IMU island (check_layout.py tests it),
+# and L2 stays the unbroken ground plane.
+POURS = {
+    # battery input: J2 pin 1 -> TVS D3 -> the buck's input capacitors on the J2 side
+    "L4_VBAT_IN": ("VBAT", [(8.85, 3.6), (17.0, 3.6), (17.0, 5.8), (12.9, 5.8), (12.9, 10.2), (9.6, 10.2),
+                            (9.6, 13.4), (8.8, 13.4), (8.8, 8.7), (10.0, 8.7), (10.0, 5.8), (8.85, 5.8)]),
+    # the input capacitors on the other side of the buck (joined to the first group on L3)
+    "L4_VBAT_HF": ("VBAT", [(3.2, 3.6), (8.05, 3.6), (8.05, 4.7), (6.9, 4.9), (5.2, 5.75), (3.2, 5.75)]),
+    # buck output: inductor -> the three output capacitors
+    "L4_5V_OUT": ("5V", [(9.5, -2.2), (10.7, -2.2), (10.7, -0.15), (17.3, -0.15), (17.3, 0.95), (10.7, 0.95), (10.7, 1.6), (9.5, 1.6)]),
+}
+POUR_CLEARANCE = 0.2
+PLANE_NETS = ("GND", "3V3_D", "3V3_IMU")
+
+
+def prune_vias(board, tracks, footprints):
+    """Take out vias that ended up with copper on one layer only (an escape via scripted by
+    preroute.py that the maze router then did not use): they would only be a drill hit."""
+    segs = {}
+    for t in tracks:
+        if t.Type() != pcbnew.PCB_VIA_T:
+            a, b = t.GetStart(), t.GetEnd()
+            segs.setdefault(t.GetNetCode(), []).append((a.x, a.y, b.x, b.y, t.GetLayer()))
+    pads = {}
+    for fp in footprints:
+        for p in fp.Pads():
+            pads.setdefault(p.GetNetCode(), []).append(p)
+
+    def touches(c, r, seg):
+        # a track may pass over the via without ending on it (a T junction)
+        ax, ay, bx, by, _ = seg
+        vx, vy = bx - ax, by - ay
+        L2 = vx * vx + vy * vy
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((c.x - ax) * vx + (c.y - ay) * vy) / L2))
+        return (ax + t * vx - c.x) ** 2 + (ay + t * vy - c.y) ** 2 <= r * r
+
+    gone = []
+    for v in tracks:
+        if v.Type() != pcbnew.PCB_VIA_T or v.GetNetname() in PLANE_NETS:
+            continue
+        c, r = v.GetPosition(), v.GetWidth(pcbnew.F_Cu) / 2
+        layers = {seg[4] for seg in segs.get(v.GetNetCode(), []) if touches(c, r, seg)}
+        for p in pads.get(v.GetNetCode(), []):
+            if p.GetBoundingBox().Contains(c):
+                layers.update(l for l in (pcbnew.F_Cu, pcbnew.B_Cu) if p.IsOnLayer(l))
+        if len(layers) < 2:
+            gone.append(v)
+    names = ["%s @(%.2f, %.2f)" % (v.GetNetname(), pcbnew.ToMM(v.GetPosition().x) - ORIGIN[0], pcbnew.ToMM(v.GetPosition().y) - ORIGIN[1]) for v in gone]
+    return gone, names
+
+
 def finish(board_path):
+    import silk
     board = pcbnew.LoadBoard(board_path)
-    names = {z.GetZoneName() for z in board.Zones()}
+    # take every container before the first Remove() (see place.py)
+    tracks, footprints, zones = list(board.GetTracks()), list(board.GetFootprints()), list(board.Zones())
+    names = {z.GetZoneName() for z in zones}
     e = BOARD_SIZE / 2 - EDGE_INSET
     if "L1_GND" not in names:
         add_zone(board, "GND", pcbnew.F_Cu, rect(-e, -e, e, e), name="L1_GND", solid=True, clearance=0.2)
     if "L4_GND" not in names:
         add_zone(board, "GND", pcbnew.B_Cu, rect(-e, -e, e, e), name="L4_GND", solid=True, clearance=0.2)
+    for name, (net, outline) in POURS.items():
+        if name not in names:
+            add_zone(board, net, pcbnew.B_Cu, outline, priority=1, name=name, solid=True, clearance=POUR_CLEARANCE)
+    gone, pruned = prune_vias(board, tracks, footprints)
+    silk.tidy(board)
+    for v in gone:
+        board.Remove(v)
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     board.Save(board_path)
-    print("finished: zones", sorted(z.GetZoneName() for z in board.Zones()))
+    print("finished: zones", sorted(names | {"L1_GND", "L4_GND"} | set(POURS)))
+    print("finished: %d dangling vias removed%s" % (len(pruned), (": " + ", ".join(pruned)) if pruned else ""))
 
 
 if __name__ == "__main__":
