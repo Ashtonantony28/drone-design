@@ -1,0 +1,80 @@
+{
+ "corner": "pessimistic",
+ "cases": {
+  "one_motor_85": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 0.6015625,
+    "throw": 0.5859375,
+    "upside_down": 0.6953125
+   },
+   "hover_throttle": 0.843,
+   "max_saturated_frac": 0.425
+  },
+  "one_motor_tilt": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 0.953125,
+    "throw": 0.890625,
+    "upside_down": 0.9296875
+   },
+   "hover_throttle": 0.836,
+   "max_saturated_frac": 0.215
+  },
+  "vibration_3x": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.811,
+   "max_saturated_frac": 0.073
+  },
+  "slow_motors": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.811,
+   "max_saturated_frac": 0.049
+  },
+  "heavy_15": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.933,
+   "max_saturated_frac": 0.081
+  },
+  "empty_battery": {
+   "gated": false,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.904,
+   "max_saturated_frac": 0.092
+  },
+  "combined": {
+   "gated": false,
+   "worst_success": {
+    "tilt_60": 0.984375,
+    "throw": 0.9296875,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.877,
+   "max_saturated_frac": 0.137
+  }
+ },
+ "failures": [
+  "one_motor_85: recovery 58.6 % < 90 %",
+  "one_motor_tilt: recovery 89.1 % < 90 %",
+  "heavy_15: hover throttle 0.93 > 0.85"
+ ]
+}

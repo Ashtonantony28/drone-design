@@ -107,13 +107,16 @@ class AngleMode:
         return torch.cat((a0.unsqueeze(-1), rate / self.rmax), -1).clamp(-1, 1)
 
 
-def run_vehicle(ev, veh, spec, n, n_ext, seed):
+def run_vehicle(ev, veh, spec, n, n_ext, seed, mutate=None, extremes=True):
     ev.load_nominal = lambda: copy.deepcopy(veh)
     ev.SENSING["imu"] = dict(gyro_filter=True, estimator=False, mahony=True, mahony_kf_ref=False)
     scen = GATED + REPORTED
-    env, groups, _ = ev.build(n, n_ext, seed, True, scen, "imu")
+    env, groups, _ = ev.build(n, n_ext, seed, extremes, scen, "imu")
     env.cfg.oob_dist = 1e9                                # position is the pilot's job
     env.quad.floor_z = -1e9                               # altitude too
+    if mutate is not None:                                # lite/stress.py: a fault on every row
+        mutate(env.quad)
+        env.quad._update_derived(torch.arange(env.quad.n))
     ctrl = AngleMode(env, veh, spec["sim"]["angle_kp"])
     steps = int(HORIZON_S * veh["control_rate_hz"])
     hold = int(HOLD_S * veh["control_rate_hz"])
