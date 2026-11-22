@@ -1,4 +1,7 @@
-"""NF-3D Lite flight controller: 46 x 38 mm, single-sided (B.Cu) board for a desktop CNC mill.
+"""NF-3D Lite flight controller: 46 x 38 mm, 2-layer unplated board for a desktop CNC mill.
+
+All signals run on the bottom copper; the top copper carries only VBAT and GND links
+(between top-solderable through-hole pads and 1.0 mm wire vias, listed in MILLING.md).
 
 ESP32 "D1 mini" (MH-ET LIVE MiniKit) on female headers, GY-521 MPU-6050 on a 1x8
 header, four AO3400A low-side brushed-motor switches, TP4056 charger module,
@@ -7,7 +10,7 @@ ME6211 3.3 V LDO. Mill rules, placement and assembly: lite/ecad/MILLING.md.
 Verify (from lite/ecad/): `pcb build boards/lite_fc/lite_fc.zen` and `pytest -q check_board.py`.
 
 Power path (VBAT is switched on the high side, as the brief asks):
-    battery (PH2.0) -> TP4056 B+/B- ; B+ (same copper as the module's OUT+) -> SW1 COM -> SW1 A = VBAT
+    battery (PH2.0) -> TP4056 B+/B- ; B+ (same copper as the module's OUT+) -> SW1 COM -> SW1 B = VBAT
     TP4056 OUT- (behind the DW01 protection FETs) = board GND
     JP1 (open) bridges OUT- to B-: closing it bypasses the module's protection FETs, which
     trip at roughly 3 A (VERIFY on your module) while four 8520 motors can pull 6-8 A.
