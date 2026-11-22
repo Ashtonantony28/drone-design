@@ -143,9 +143,53 @@ def frame(spec) -> "Part":
         cuts.append(Pos(sx * 12.0, 0, 0) * Box(sh, sw, t, align=C))
     for cx, cy, w, hh in g["plate_windows"]:
         cuts.append(Pos(cx, cy, 0) * Box(w, hh, t, align=C))
+    au = g.get("autonomy", {})
+    if au.get("fit"):
+        body, more = _autonomy_mounts(spec, body)
+        cuts += more
     for c in cuts:
         body -= c
     return body
+
+
+def _autonomy_mounts(spec, body):
+    """v3: tail tab carrying the flow + ToF sensors (looking down through windows), nose tab with
+    a gothic arch the battery slides through and the camera board is taped behind."""
+    g, d = spec["geometry_mm"], dims(spec)
+    au, t = g["autonomy"], d["t"]
+    cuts = []
+    tab = au["tail_tab"]
+    x0, x1 = tab["x"]
+    body += Pos((x0 + x1) / 2, 0, 0) * Box(x1 - x0, 2 * tab["half_width"], t, align=C)
+    nt = au["nose_tab"]
+    n0, n1 = nt["x"]
+    for sy in (-1, 1):  # two side bars; the battery slides in between, under the arch
+        body += Pos((n0 + n1) / 2, sy * (nt["half_width"] - nt["bar"] / 2), 0) * Box(n1 - n0, nt["bar"], t, align=C)
+    body += Pos(au["arch"]["x0"] + au["arch"]["thickness"] / 2, 0, 0) * Box(au["arch"]["thickness"] + 2.0, 2 * nt["half_width"], t, align=C)
+    # each sensor breakout sits on a rim round a window (light, and the lens / ToF apertures see the floor)
+    for m in (au["flow_module"], au["tof_module"]):
+        sx, sy = m["size"][0] - 2 * tab["rim"], m["size"][1] - 2 * tab["rim"]
+        cuts.append(Pos(m["centre"][0], m["centre"][1], 0) * Box(sx, sy, t, align=C))
+    a = au["arch"]
+    hw, H, ow, wall = a["half_width"], a["height"], a["opening_half_width"], a["opening_wall"]
+    apex = wall + ow * math.tan(math.radians(a["flank_deg"]))
+    outer = Polygon((-hw, 0), (hw, 0), (hw, H), (-hw, H), align=None)
+    opening = Polygon((-ow, -0.1), (ow, -0.1), (ow, wall), (0, apex), (-ow, wall), align=None)
+    pl = Plane(origin=(a["x0"], 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))
+    arch = extrude(pl * (outer - opening), amount=a["thickness"])
+    body += arch
+    # zip-tie slots either side of the camera board, and two gussets behind the arch posts
+    sw, sh = a["tie_slot"]
+    cam = au["camera"]
+    yc, cw = cam["y_centre"], cam["size"][0]
+    zc = cam["z0"] + cam["size"][1] / 2
+    for ys in (yc - cw / 2 - 1.5, yc + cw / 2 + 1.5):
+        cuts.append(Pos(a["x0"] + a["thickness"] / 2, ys, zc) * Box(a["thickness"] + 0.2, sw, sh, align=(Align.CENTER,) * 3))
+    gx = Plane(origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
+    for yg in (hw - 1.5, -hw):
+        tri = Polygon((a["x0"], 0), (a["x0"] - 8.0, 0), (a["x0"], 12.0), align=None)
+        body += Pos(0, yg, 0) * extrude(gx * tri, amount=-1.5)
+    return body, cuts
 
 
 def guard(spec) -> "Part":
@@ -184,6 +228,14 @@ def guard(spec) -> "Part":
                                                                            align=(Align.MIN, Align.CENTER, Align.MIN))
         piece = Pos(x, y, zb) * piece
         part = piece if part is None else part + piece
+    au = spec["geometry_mm"].get("autonomy", {})
+    if au.get("fit"):
+        # v3: the front rings stop short of the camera and the nose arch (which guards the front)
+        a = au["arch"]
+        kx0 = a["x0"] - au["camera"]["size"][2] - 2.0
+        kx1 = a["x0"] + a["thickness"] + 2.0
+        kw = a["half_width"] + 2.0
+        part -= Pos((kx0 + kx1) / 2, 0, 0) * Box(kx1 - kx0, 2 * kw, 200.0, align=(Align.CENTER, Align.CENTER, Align.CENTER))
     return part
 
 
@@ -237,6 +289,18 @@ def build_assembly(spec=None) -> list[Component]:
     imu = Box(im["x"][1] - im["x"][0], im["y"][1] - im["y"][0], im["height"], align=C)
     comps.append(Component("imu", Pos((im["x"][0] + im["x"][1]) / 2, (im["y"][0] + im["y"][1]) / 2, d["board_z1"]) * imu,
                            mass_g=P["imu"]["mass_g"], group="avionics", touches={"board", "charger"}))  # courtyards abut (board DRC owns that gap)
+    au = g.get("autonomy", {})
+    if au.get("fit"):
+        for key, part, colour in (("flow_module", "flow", None), ("tof_module", "tof", None)):
+            m = au[key]
+            sx, sy, sz = m["size"]
+            comps.append(Component(part, Pos(m["centre"][0], m["centre"][1], d["t"]) * Box(sx, sy, sz, align=C),
+                                   mass_g=P[part]["mass_g"], group="autonomy", touches={"frame"}))
+        cam = au["camera"]
+        cy, cz, cdep = cam["size"]
+        x1 = au["arch"]["x0"]
+        comps.append(Component("camera", Pos(x1 - cdep / 2, cam["y_centre"], cam["z0"]) * Box(cdep, cy, cz, align=C),
+                               mass_g=P["camera"]["mass_g"], group="autonomy", touches={"frame"}))
     if g["guard"]["fit"]:
         comps.append(Component("guard", guard(spec), material=g["frame_material"], touches={"frame"}))
     e = P["battery"]["envelope_mm"]
@@ -251,4 +315,6 @@ def lumped_masses(spec):
     out = [(f"prop_{i}", spec["parts"]["prop"]["mass_g"], (x, y, zp)) for i, (x, y) in enumerate(motor_xy(spec))]
     out.append(("hardware", spec["parts"]["hardware"]["mass_g"], (0.0, 0.0, 2.0)))
     out.append(("wiring", spec["parts"]["wiring"]["mass_g"], (0.0, 0.0, 4.0)))
+    if spec["geometry_mm"].get("autonomy", {}).get("fit"):
+        out.append(("autonomy_wiring", spec["parts"]["autonomy_wiring"]["mass_g"], (-5.0, 0.0, 8.0)))  # leads run nose to tail
     return out

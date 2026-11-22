@@ -8,8 +8,8 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.584,
-   "max_saturated_frac": 0.01
+   "hover_throttle": 0.623,
+   "max_saturated_frac": 0.009
   },
   "one_motor_tilt": {
    "gated": true,
@@ -18,8 +18,8 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.579,
-   "max_saturated_frac": 0.009
+   "hover_throttle": 0.619,
+   "max_saturated_frac": 0.008
   },
   "vibration_3x": {
    "gated": true,
@@ -28,7 +28,7 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.562,
+   "hover_throttle": 0.6,
    "max_saturated_frac": 0.003
   },
   "slow_motors": {
@@ -38,7 +38,7 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.562,
+   "hover_throttle": 0.6,
    "max_saturated_frac": 0.0
   },
   "heavy_15": {
@@ -48,7 +48,7 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.646,
+   "hover_throttle": 0.69,
    "max_saturated_frac": 0.004
   },
   "empty_battery": {
@@ -58,8 +58,8 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.626,
-   "max_saturated_frac": 0.006
+   "hover_throttle": 0.671,
+   "max_saturated_frac": 0.005
   },
   "combined": {
    "gated": false,
@@ -68,7 +68,7 @@
     "throw": 1.0,
     "upside_down": 1.0
    },
-   "hover_throttle": 0.607,
+   "hover_throttle": 0.65,
    "max_saturated_frac": 0.004
   }
  },

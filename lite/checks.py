@@ -126,10 +126,15 @@ def run(spec=None, verbose=True):
         fail(f"arm crash SF {res['arm']['crash_sf']} < 1.5 (20 g on one leg)")
 
     res["propulsion"] = {}
+    base = spec
+    if spec["geometry_mm"].get("autonomy", {}).get("fit"):
+        # v3: the companion board streams video over Wi-Fi the whole flight
+        base = copy.deepcopy(spec)
+        base["electrical"]["avionics_w"] += spec["electrical"].get("avionics_autonomy_w", 0.0)
     for corner in ("nominal", "pessimistic"):
-        sp = spec
+        sp = base
         if corner == "pessimistic":
-            sp = copy.deepcopy(spec)
+            sp = copy.deepcopy(base)
             sp["requirements"].update(spec.get("requirements_pessimistic", {}))
         p = analyse(sp, mass_kg=M, corner=corner)
         res["propulsion"][corner] = {k: p[k] for k in ("mass_kg", "thrust_to_weight_nominal", "thrust_to_weight_empty",

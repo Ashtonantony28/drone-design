@@ -85,14 +85,14 @@ State Arming::update(const ArmingInputs& in) {
     }
     case State::ARMED:
       if (s.kill) { disarm(KILLED); break; }
-      if (!link) { disarm(LINK_LOST); break; }
+      if (!link && !in.hold_mode) { disarm(LINK_LOST); break; }
       if (in.tilt > c_.crash_tilt) {
         if (!tilt_high_) { tilt_high_ = true; tilt_since_ = in.now_ms; }
         if (in.now_ms - tilt_since_ >= c_.crash_ms) { disarm(CRASH); break; }
       } else {
         tilt_high_ = false;
       }
-      if (s.throttle <= c_.arm_max_throttle) {
+      if (s.throttle <= c_.arm_max_throttle && !in.hold_mode) {
         if (!idle_) { idle_ = true; idle_since_ = in.now_ms; }
         if (in.now_ms - idle_since_ >= c_.idle_disarm_ms) { disarm(IDLE_TIMEOUT); break; }
       } else {
@@ -112,12 +112,35 @@ void FlightCore::init() {
   gyro_lpf_.init(150.0f, fs);  // neuroflight-fc ControlLoopConfig::gyro_lpf_hz
   pid_.init(nf::RatePidConfig{}, fs);
   mixer_.init(nf::MixerParams{});
-  arming_.init();
+  arming_.init(arming_cfg);
   tick_ = 0;
   attitude_seeded_ = false;
+  // v3 estimator: neuroflight-fc ControlLoopConfig defaults (accel_lpf_hz 40, mahony_ref_lpf_hz 5)
+  kf_.init(nf::TranslationKf::Config{});
+  kf_.reset();
+  acc_lpf_.init(40.0f, fs);
+  for (auto& f : acc_ref_) { f.init(5.0f, fs); f.reset(0.0f); }
+  prev_kf_vel_ = {};
+  flow_age_ = Age{};
+  height_age_ = Age{};
+  ap_.init();
+  ap_out_ = AutopilotOutput{};
+  armed_prev_ = false;
 }
 
-CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vbat, uint32_t now_ms) {
+// neuroflight-fc ControlLoop::accel_ref: soft deadband on the KF acceleration estimate
+Vec3 FlightCore::accel_ref() const {
+  Vec3 a{acc_ref_[0].value(), acc_ref_[1].value(), acc_ref_[2].value()};
+  const float db = 0.3f;
+  const float ah = std::sqrt(a.x * a.x + a.y * a.y);
+  const float sh = ah > db ? (ah - db) / ah : 0.0f;
+  a.x *= sh;
+  a.y *= sh;
+  a.z = std::fabs(a.z) > db ? a.z - nf::signf(a.z) * db : 0.0f;
+  return a;
+}
+
+CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vbat, uint32_t now_ms, const AuxInput* aux) {
   CoreOutput out;
   // 1. gyro calibration runs whenever disarmed (refuses to finish while moving)
   if (arming_.state() != State::ARMED) {
@@ -127,12 +150,32 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
     mahony_.init_from_accel(imu.accel);
     attitude_seeded_ = true;
   }
-  // 2. attitude
+  // 2. attitude (KF-referenced Mahony: neuroflight-fc ControlLoop, mahony_kf_ref)
   const Vec3 g = gyro_lpf_.apply(imu.gyro);
-  mahony_.update(g, imu.accel, dt_);
+  const Vec3 acc = acc_lpf_.apply(imu.accel);
+  const Vec3 ar = accel_ref();
+  mahony_.update(g, imu.accel, dt_, Vec3{ar.x, ar.y, ar.z + nf::vehicle::kGravity});
   const Vec3 rate = mahony_.rates(g);
   const Quat q = mahony_.q();
   const float tilt = nf::tilt_angle(q);
+  // 2b. translation KF (only fed when the companion board sends flow / range)
+  const bool was_armed = arming_.state() == State::ARMED;
+  kf_.predict(acc, q, dt_);
+  if (aux && aux->sample_new) kf_.correct(aux->flow, aux->range, q, rate);
+  flow_age_.update(kf_.flow_valid(), dt_);
+  height_age_.update(kf_.height_valid(), dt_);
+  {
+    const Vec3 v = kf_.vel();
+    Vec3 a{};
+    if (was_armed && kf_.height_valid() && kf_.flow_valid() && nf::finite(v) && nf::finite(prev_kf_vel_))
+      a = (v - prev_kf_vel_) / dt_;
+    const float ah = std::sqrt(a.x * a.x + a.y * a.y), amax = 6.0f;
+    if (ah > amax) a = {a.x * amax / ah, a.y * amax / ah, a.z};
+    a.z = nf::clampf(a.z, -0.5f * nf::vehicle::kGravity, 0.5f * nf::vehicle::kGravity);
+    if (!nf::finite(a)) a = {};
+    for (int i = 0; i < 3; ++i) acc_ref_[i].apply(a[i]);
+    prev_kf_vel_ = v;
+  }
 
   // 3. arming
   ArmingInputs ai;
@@ -141,19 +184,101 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
   ai.vbat = vbat;
   ai.sticks = sticks;
   ai.now_ms = now_ms;
-  const State st = arming_.update(ai);
+  ai.hold_mode = was_armed && ap_.hold_mode();
+  State st = arming_.update(ai);
+  if (st == State::ARMED && !armed_prev_) {
+    // arming: x/y start from here, height continues from the ToF
+    const Vec3 p = kf_.pos();
+    kf_.reset(Vec3{0.0f, 0.0f, p.z}, Vec3{0.0f, 0.0f, 0.0f});
+    flow_age_ = Age{};
+    height_age_ = Age{};
+    prev_kf_vel_ = {};
+    ap_.disarmed();
+  }
   out.state = st;
   out.flags = arming_.flags() | arming_.last_disarm();
   out.tilt = tilt;
   out.q = q;
+  out.pos = kf_.pos();
+  out.vel = kf_.vel();
+  out.height_valid = kf_.height_valid();
+  out.flow_valid = kf_.flow_valid();
+
+  // companion command: latch until the next outer-loop step
+  if (aux) {
+    if (aux->comp.cmd_new) { comp_.cmd = aux->comp.cmd; comp_.cmd_new = true; }
+    comp_.cmd_age_s = aux->comp.cmd_age_s;
+  } else {
+    comp_.cmd_age_s = 1e3f;
+  }
+  // mode buttons: edges, released once after boot
+  const bool btn[3] = {sticks.btn_hold, sticks.btn_angle, sticks.btn_auto};
+  for (int i = 0; i < 3; ++i) {
+    if (btn[i] && !btn_prev_[i]) btn_edge_[i] = true;  // latched until the next outer-loop step
+    btn_prev_[i] = btn[i];
+  }
 
   if (st != State::ARMED) {
+    armed_prev_ = false;
+    ap_.disarmed();
+    ap_out_ = AutopilotOutput{};
+    comp_.cmd_new = false;
+    btn_edge_[0] = btn_edge_[1] = btn_edge_[2] = false;
+    out.mode = Mode::ANGLE;
     pid_.reset();
     tick_ = 0;
     return out;  // motors 0
   }
-  // 4. outer loop at kControlRateHz
-  if (tick_ % static_cast<uint32_t>(outer_div_) == 0) cmd_ = angle_mode(q, map_sticks(sticks, sticks_cfg), angle_cfg);
+  armed_prev_ = true;
+  // 4. outer loop at kControlRateHz: Autopilot (hold modes) or angle mode from the sticks
+  const bool outer = tick_ % static_cast<uint32_t>(outer_div_) == 0;
+  if (outer) {
+    const Setpoint sp = map_sticks(sticks, sticks_cfg);
+    PilotInput pi;
+    pi.link_ok = sticks.connected && sticks.age_ms <= arming_cfg.link_timeout_ms;
+    pi.req_hold = btn_edge_[0];
+    pi.req_angle = btn_edge_[1];
+    pi.req_auto = btn_edge_[2];
+    btn_edge_[0] = btn_edge_[1] = btn_edge_[2] = false;
+    pi.throttle = sticks.throttle;
+    pi.fwd = shape(sticks.pitch, sticks_cfg);   // stick forward = fly forward
+    pi.left = -shape(sticks.roll, sticks_cfg);  // stick right = fly right
+    pi.up = shape(sticks.climb, sticks_cfg);
+    pi.tilt_roll = sp.roll;
+    pi.tilt_pitch = sp.pitch;
+    pi.yaw_rate = sp.yaw_rate;
+    EstimateInput est;
+    est.p = kf_.pos();
+    est.v = kf_.vel();
+    est.yaw = q.yaw();
+    est.flow_age = flow_age_.age;
+    est.height_age = height_age_.age;
+    ap_out_ = ap_.update(est, pi, comp_, dt_ * static_cast<float>(outer_div_));
+    comp_.cmd_new = false;
+    out.refused = ap_out_.refused;
+    if (ap_out_.disarm_landed) {
+      arming_.force_disarm(LANDED);
+      ap_.disarmed();
+      out.state = arming_.state();
+      out.flags = arming_.flags() | arming_.last_disarm();
+      out.mode = Mode::ANGLE;
+      pid_.reset();
+      tick_ = 0;
+      armed_prev_ = false;
+      return out;
+    }
+    if (ap_out_.use_law) {
+      Setpoint lp;
+      lp.roll = ap_out_.tt.roll;
+      lp.pitch = ap_out_.tt.pitch;
+      lp.yaw_rate = ap_out_.yaw_rate;
+      lp.thrust_n = ap_out_.tt.thrust_n;
+      cmd_ = angle_mode(q, lp, angle_cfg);
+    } else {
+      cmd_ = angle_mode(q, sp, angle_cfg);
+    }
+  }
+  out.mode = ap_.mode();
   ++tick_;
   // 5. rate PID + mixer (same order as sim/ctbr.py RateController)
   const Vec3 tau = pid_.update(cmd_.rate_sp, rate);
@@ -161,8 +286,8 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
   pid_.integrate(m.any_saturated());
   for (int i = 0; i < 4; ++i) out.motor[i] = nf::clampf(m.cmd[i], 0.0f, 1.0f);
   out.saturated = m.any_saturated();
-  // zero throttle stops the motors (no idle spin on a brushed micro)
-  if (sticks.throttle <= 0.0f)
+  // zero throttle stops the motors in angle mode (no idle spin on a brushed micro)
+  if (!ap_out_.use_law && sticks.throttle <= 0.0f)
     for (float& d : out.motor) d = 0.0f;
   return out;
 }

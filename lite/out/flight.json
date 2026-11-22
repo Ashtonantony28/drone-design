@@ -1,28 +1,28 @@
 {
  "vehicles": {
   "nominal": {
-   "mass": 0.0672,
+   "mass": 0.0779,
    "inertia": [
-    4.182e-05,
-    4.382e-05,
-    7.294e-05
+    4.345e-05,
+    5.615e-05,
+    8.477e-05
    ],
    "arm_xy": 0.036,
-   "thrust_max": 0.2844,
-   "thrust_curve_a": 0.0327,
+   "thrust_max": 0.3369,
+   "thrust_curve_a": 0.2431,
    "yaw_torque_coeff": 0.00544,
    "motor_tau_up": 0.04,
    "motor_tau_down": 0.06,
    "idle_command": 0.0,
    "lin_drag": [
-    0.0269,
-    0.0269,
-    0.0403
+    0.0312,
+    0.0312,
+    0.0467
    ],
    "rot_drag": [
-    2.688e-06,
-    2.688e-06,
-    4.032e-06
+    3.1160000000000003e-06,
+    3.1160000000000003e-06,
+    4.674e-06
    ],
    "gravity": 9.81,
    "control_rate_hz": 500,
@@ -35,28 +35,28 @@
    ]
   },
   "pessimistic": {
-   "mass": 0.0705,
+   "mass": 0.0817,
    "inertia": [
-    4.391e-05,
-    4.601e-05,
-    7.659e-05
+    4.562e-05,
+    5.896e-05,
+    8.901e-05
    ],
    "arm_xy": 0.036,
-   "thrust_max": 0.2118,
-   "thrust_curve_a": 0.02,
+   "thrust_max": 0.2519,
+   "thrust_curve_a": 0.1976,
    "yaw_torque_coeff": 0.00769,
    "motor_tau_up": 0.04,
    "motor_tau_down": 0.06,
    "idle_command": 0.0,
    "lin_drag": [
-    0.0282,
-    0.0282,
-    0.0423
+    0.0327,
+    0.0327,
+    0.049
    ],
    "rot_drag": [
-    2.82e-06,
-    2.82e-06,
-    4.229999999999999e-06
+    3.268e-06,
+    3.268e-06,
+    4.902e-06
    ],
    "gravity": 9.81,
    "control_rate_hz": 500,
@@ -73,75 +73,75 @@
   "nominal": {
    "tilt_60/nominal": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "tilt_60/randomized": {
     "success": 1.0,
-    "settle_s_median": 0.27399998903274536,
-    "settle_s_p95": 0.4519999623298645,
+    "settle_s_median": 0.2720000147819519,
+    "settle_s_p95": 0.44999998807907104,
     "saturated_frac": 0.0
    },
    "throw/nominal": {
     "success": 1.0,
     "settle_s_median": 0.20999999344348907,
-    "settle_s_p95": 0.26649999618530273,
-    "saturated_frac": 0.0017083333805203438
+    "settle_s_p95": 0.26249998807907104,
+    "saturated_frac": 0.0015364582650363445
    },
    "throw/randomized": {
     "success": 1.0,
-    "settle_s_median": 0.20600000023841858,
-    "settle_s_p95": 0.28849998116493225,
-    "saturated_frac": 0.003783854190260172
+    "settle_s_median": 0.20399999618530273,
+    "settle_s_p95": 0.28600001335144043,
+    "saturated_frac": 0.0033906251192092896
    },
    "upside_down/nominal": {
     "success": 1.0,
-    "settle_s_median": 0.4699999988079071,
-    "settle_s_p95": 0.5540000200271606,
+    "settle_s_median": 0.46799999475479126,
+    "settle_s_p95": 0.5544999837875366,
     "saturated_frac": 0.0
    },
    "upside_down/randomized": {
     "success": 1.0,
-    "settle_s_median": 0.47200000286102295,
-    "settle_s_p95": 0.5640000104904175,
-    "saturated_frac": 0.0
+    "settle_s_median": 0.47600001096725464,
+    "settle_s_p95": 0.5509999990463257,
+    "saturated_frac": 2.8645834390772507e-05
    },
    "mass=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "mass=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.1940000057220459,
-    "settle_s_p95": 0.26600000262260437,
-    "saturated_frac": 0.001208333414979279
+    "settle_s_p95": 0.26179999113082886,
+    "saturated_frac": 0.0010833332780748606
    },
    "mass=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "mass=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.21799999475479126,
-    "settle_s_p95": 0.2752000093460083,
-    "saturated_frac": 0.0031874999403953552
+    "settle_s_median": 0.2160000056028366,
+    "settle_s_p95": 0.26669999957084656,
+    "saturated_frac": 0.003000000026077032
    },
    "inertia=min/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.3019999861717224,
-    "settle_s_p95": 0.30489999055862427,
+    "settle_s_p95": 0.3019999861717224,
     "saturated_frac": 0.0
    },
    "inertia=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.17599999904632568,
-    "settle_s_p95": 0.2678999900817871,
-    "saturated_frac": 0.0018124999478459358
+    "settle_s_median": 0.1720000058412552,
+    "settle_s_p95": 0.26479998230934143,
+    "saturated_frac": 0.0016874999273568392
    },
    "inertia=max/tilt_60": {
     "success": 1.0,
@@ -152,8 +152,8 @@
    "inertia=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.2160000056028366,
-    "settle_s_p95": 0.28049999475479126,
-    "saturated_frac": 0.0028750000055879354
+    "settle_s_p95": 0.2729000151157379,
+    "saturated_frac": 0.002541666617617011
    },
    "thrust_max=min/tilt_60": {
     "success": 1.0,
@@ -163,141 +163,141 @@
    },
    "thrust_max=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2280000001192093,
-    "settle_s_p95": 0.27090001106262207,
-    "saturated_frac": 0.0005624999757856131
+    "settle_s_median": 0.22599999606609344,
+    "settle_s_p95": 0.2669000029563904,
+    "saturated_frac": 0.00027083331951871514
    },
    "thrust_max=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.28999999165534973,
-    "settle_s_p95": 0.2919999957084656,
+    "settle_s_median": 0.2879999876022339,
+    "settle_s_p95": 0.28999999165534973,
     "saturated_frac": 0.0
    },
    "thrust_max=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.1940000057220459,
-    "settle_s_p95": 0.2639999985694885,
-    "saturated_frac": 0.001770833390764892
+    "settle_s_p95": 0.26089999079704285,
+    "saturated_frac": 0.00160416669677943
    },
    "per_motor_thrust_imbalance=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
-    "settle_s_p95": 0.2689000070095062,
+    "settle_s_median": 0.2619999945163727,
+    "settle_s_p95": 0.27000001072883606,
     "saturated_frac": 0.0
    },
    "per_motor_thrust_imbalance=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.21400000154972076,
-    "settle_s_p95": 0.28700000047683716,
-    "saturated_frac": 0.003312499960884452
+    "settle_s_median": 0.21199999749660492,
+    "settle_s_p95": 0.2847000062465668,
+    "saturated_frac": 0.0031458334997296333
    },
    "per_motor_thrust_imbalance=max/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.257999986410141,
-    "settle_s_p95": 0.5550000071525574,
+    "settle_s_p95": 0.5160999894142151,
     "saturated_frac": 0.0
    },
    "per_motor_thrust_imbalance=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.21199999749660492,
-    "settle_s_p95": 0.30859997868537903,
-    "saturated_frac": 0.0030624999199062586
+    "settle_s_median": 0.20600000023841858,
+    "settle_s_p95": 0.2971999943256378,
+    "saturated_frac": 0.0027083333116024733
    },
    "yaw_torque_coeff=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "yaw_torque_coeff=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.21400000154972076,
-    "settle_s_p95": 0.3354000151157379,
-    "saturated_frac": 0.0075416662730276585
+    "settle_s_median": 0.20999999344348907,
+    "settle_s_p95": 0.32339999079704285,
+    "saturated_frac": 0.007124999538064003
    },
    "yaw_torque_coeff=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "yaw_torque_coeff=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.19599999487400055,
-    "settle_s_p95": 0.2460000067949295,
-    "saturated_frac": 0.0005208333022892475
+    "settle_s_p95": 0.24490000307559967,
+    "saturated_frac": 0.0004374999844003469
    },
    "motor_tau=min/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.2759999930858612,
-    "settle_s_p95": 0.2768999934196472,
+    "settle_s_p95": 0.2759999930858612,
     "saturated_frac": 0.0
    },
    "motor_tau=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.19200000166893005,
-    "settle_s_p95": 0.2978000044822693,
-    "saturated_frac": 0.00787500012665987
+    "settle_s_median": 0.19599999487400055,
+    "settle_s_p95": 0.29179999232292175,
+    "saturated_frac": 0.007374999579042196
    },
    "motor_tau=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.24799999594688416,
-    "settle_s_p95": 0.24799999594688416,
+    "settle_s_median": 0.2460000067949295,
+    "settle_s_p95": 0.25,
     "saturated_frac": 0.0
    },
    "motor_tau=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.2199999988079071,
-    "settle_s_p95": 0.3084999918937683,
+    "settle_s_p95": 0.3056999742984772,
     "saturated_frac": 0.0014375000027939677
    },
    "lin_drag=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "lin_drag=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.20000000298023224,
-    "settle_s_p95": 0.26499998569488525,
-    "saturated_frac": 0.001979166641831398
+    "settle_s_p95": 0.2599000036716461,
+    "saturated_frac": 0.0018333334010094404
    },
    "lin_drag=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "lin_drag=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20399999618530273,
-    "settle_s_p95": 0.24089999496936798,
-    "saturated_frac": 0.0003124999930150807
+    "settle_s_median": 0.20600000023841858,
+    "settle_s_p95": 0.23890000581741333,
+    "saturated_frac": 0.0002500000118743628
    },
    "latency_s=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.257999986410141,
+    "settle_s_median": 0.25999999046325684,
     "settle_s_p95": 0.25999999046325684,
     "saturated_frac": 0.0
    },
    "latency_s=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.20600000023841858,
-    "settle_s_p95": 0.25999999046325684,
-    "saturated_frac": 0.0022916668094694614
+    "settle_s_p95": 0.25690001249313354,
+    "saturated_frac": 0.002041666768491268
    },
    "latency_s=max/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.27799999713897705,
-    "settle_s_p95": 0.2800000011920929,
+    "settle_s_p95": 0.28200000524520874,
     "saturated_frac": 0.0
    },
    "latency_s=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.18400000035762787,
-    "settle_s_p95": 0.27369996905326843,
-    "saturated_frac": 0.0004791666578967124
+    "settle_s_p95": 0.26969999074935913,
+    "saturated_frac": 0.00043750001350417733
    },
    "gyro_noise_std=min/tilt_60": {
     "success": 1.0,
@@ -307,467 +307,467 @@
    },
    "gyro_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20399999618530273,
-    "settle_s_p95": 0.26249998807907104,
-    "saturated_frac": 0.0026458334177732468
+    "settle_s_median": 0.1979999989271164,
+    "settle_s_p95": 0.25450000166893005,
+    "saturated_frac": 0.0024999999441206455
    },
    "gyro_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
-    "settle_s_p95": 0.2619999945163727,
+    "settle_s_median": 0.2619999945163727,
+    "settle_s_p95": 0.2639999985694885,
     "saturated_frac": 0.0
    },
    "gyro_noise_std=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.20999999344348907,
-    "settle_s_p95": 0.2858000099658966,
-    "saturated_frac": 0.0027083333116024733
+    "settle_s_p95": 0.2777999937534332,
+    "saturated_frac": 0.00252083339728415
    },
    "gyro_bias=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "gyro_bias=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.22200000286102295,
-    "settle_s_p95": 0.2718000113964081,
-    "saturated_frac": 0.0025625000707805157
+    "settle_s_median": 0.21799999475479126,
+    "settle_s_p95": 0.2687000036239624,
+    "saturated_frac": 0.0022499999031424522
    },
    "gyro_bias=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "gyro_bias=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20800000429153442,
-    "settle_s_p95": 0.29120001196861267,
-    "saturated_frac": 0.003208333160728216
+    "settle_s_median": 0.20600000023841858,
+    "settle_s_p95": 0.2858999967575073,
+    "saturated_frac": 0.0026666666381061077
    },
    "accel_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "accel_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20399999618530273,
-    "settle_s_p95": 0.29030001163482666,
-    "saturated_frac": 0.0027083333116024733
+    "settle_s_median": 0.19599999487400055,
+    "settle_s_p95": 0.28139999508857727,
+    "saturated_frac": 0.0025208331644535065
    },
    "accel_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "accel_noise_std=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.19200000166893005,
-    "settle_s_p95": 0.26829999685287476,
-    "saturated_frac": 0.0003958333400078118
+    "settle_s_median": 0.1899999976158142,
+    "settle_s_p95": 0.2662999927997589,
+    "saturated_frac": 0.0002916666562668979
    },
    "vel_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "vel_noise_std=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.20600000023841858,
-    "settle_s_p95": 0.27000001072883606,
-    "saturated_frac": 0.0023333332501351833
+    "settle_s_p95": 0.2646999955177307,
+    "saturated_frac": 0.0021041666623204947
    },
    "vel_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "vel_noise_std=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.21199999749660492,
-    "settle_s_p95": 0.24870000779628754,
-    "saturated_frac": 0.00252083339728415
+    "settle_s_p95": 0.24780000746250153,
+    "saturated_frac": 0.0021249998826533556
    },
    "pos_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "pos_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20600000023841858,
-    "settle_s_p95": 0.25519999861717224,
-    "saturated_frac": 0.003020833246409893
+    "settle_s_median": 0.20200000703334808,
+    "settle_s_p95": 0.2483000010251999,
+    "saturated_frac": 0.0027708332054316998
    },
    "pos_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
+    "settle_s_median": 0.2619999945163727,
     "settle_s_p95": 0.2619999945163727,
     "saturated_frac": 0.0
    },
    "pos_noise_std=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.19200000166893005,
-    "settle_s_p95": 0.28209999203681946,
-    "saturated_frac": 0.002916666679084301
+    "settle_s_p95": 0.2744999825954437,
+    "saturated_frac": 0.0026875000912696123
    }
   },
   "pessimistic": {
    "tilt_60/nominal": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "tilt_60/randomized": {
     "success": 1.0,
-    "settle_s_median": 0.28200000524520874,
-    "settle_s_p95": 0.4189999997615814,
-    "saturated_frac": 0.0030729169957339764
+    "settle_s_median": 0.2800000011920929,
+    "settle_s_p95": 0.40299999713897705,
+    "saturated_frac": 0.0021953124087303877
    },
    "throw/nominal": {
     "success": 1.0,
-    "settle_s_median": 0.23000000417232513,
-    "settle_s_p95": 0.5264999270439148,
-    "saturated_frac": 0.03160416707396507
+    "settle_s_median": 0.2240000069141388,
+    "settle_s_p95": 0.4739999771118164,
+    "saturated_frac": 0.02569010481238365
    },
    "throw/randomized": {
     "success": 1.0,
-    "settle_s_median": 0.23800000548362732,
-    "settle_s_p95": 0.5694999694824219,
-    "saturated_frac": 0.04569791257381439
+    "settle_s_median": 0.23000000417232513,
+    "settle_s_p95": 0.5019999742507935,
+    "saturated_frac": 0.037080731242895126
    },
    "upside_down/nominal": {
     "success": 1.0,
-    "settle_s_median": 0.4740000069141388,
-    "settle_s_p95": 0.5659999847412109,
-    "saturated_frac": 0.00010416666918899864
+    "settle_s_median": 0.47999998927116394,
+    "settle_s_p95": 0.5665000081062317,
+    "saturated_frac": 0.0001536458294140175
    },
    "upside_down/randomized": {
     "success": 1.0,
     "settle_s_median": 0.4860000014305115,
-    "settle_s_p95": 0.562999963760376,
-    "saturated_frac": 0.007348958402872086
+    "settle_s_p95": 0.5584999918937683,
+    "saturated_frac": 0.0072708334773778915
    },
    "mass=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "mass=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2160000056028366,
-    "settle_s_p95": 0.4569000005722046,
-    "saturated_frac": 0.03320833295583725
+    "settle_s_median": 0.21199999749660492,
+    "settle_s_p95": 0.41269999742507935,
+    "saturated_frac": 0.02681249938905239
    },
    "mass=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.26600000262260437,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "mass=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2280000001192093,
-    "settle_s_p95": 0.5321999788284302,
-    "saturated_frac": 0.03849999979138374
+    "settle_s_median": 0.22599999606609344,
+    "settle_s_p95": 0.4803999960422516,
+    "saturated_frac": 0.03135416656732559
    },
    "inertia=min/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.2919999957084656,
-    "settle_s_p95": 0.29490000009536743,
+    "settle_s_p95": 0.29600000381469727,
     "saturated_frac": 0.0
    },
    "inertia=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.17399999499320984,
-    "settle_s_p95": 0.47839999198913574,
-    "saturated_frac": 0.023729166015982628
+    "settle_s_p95": 0.4356999695301056,
+    "saturated_frac": 0.019749999046325684
    },
    "inertia=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.2759999930858612,
-    "settle_s_p95": 0.2800000011920929,
+    "settle_s_median": 0.27399998903274536,
+    "settle_s_p95": 0.2759999930858612,
     "saturated_frac": 0.0
    },
    "inertia=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2280000001192093,
-    "settle_s_p95": 0.5734999775886536,
-    "saturated_frac": 0.03922916576266289
+    "settle_s_median": 0.2240000069141388,
+    "settle_s_p95": 0.5085999965667725,
+    "saturated_frac": 0.031437501311302185
    },
    "thrust_max=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27399998903274536,
-    "settle_s_p95": 0.2800000011920929,
-    "saturated_frac": 0.00970833282917738
+    "settle_s_median": 0.27000001072883606,
+    "settle_s_p95": 0.2759999930858612,
+    "saturated_frac": 0.0028958332259207964
    },
    "thrust_max=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2540000081062317,
-    "settle_s_p95": 0.483599990606308,
-    "saturated_frac": 0.05120833218097687
+    "settle_s_median": 0.24400000274181366,
+    "settle_s_p95": 0.4391999840736389,
+    "saturated_frac": 0.03812499716877937
    },
    "thrust_max=max/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.2840000092983246,
-    "settle_s_p95": 0.2879999876022339,
-    "saturated_frac": 0.0
-   },
-   "thrust_max=max/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.21199999749660492,
-    "settle_s_p95": 0.504800021648407,
-    "saturated_frac": 0.025875000283122063
-   },
-   "per_motor_thrust_imbalance=min/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2800000011920929,
-    "saturated_frac": 0.003916666377335787
-   },
-   "per_motor_thrust_imbalance=min/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.22200000286102295,
-    "settle_s_p95": 0.6973999738693237,
-    "saturated_frac": 0.04893749952316284
-   },
-   "per_motor_thrust_imbalance=max/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.5931000113487244,
-    "saturated_frac": 0.0
-   },
-   "per_motor_thrust_imbalance=max/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.2639999985694885,
-    "settle_s_p95": 0.5204999446868896,
-    "saturated_frac": 0.05712499842047691
-   },
-   "yaw_torque_coeff=min/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2720000147819519,
-    "saturated_frac": 0.0
-   },
-   "yaw_torque_coeff=min/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.25200000405311584,
-    "settle_s_p95": 0.7185999751091003,
-    "saturated_frac": 0.054624997079372406
-   },
-   "yaw_torque_coeff=max/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2720000147819519,
-    "saturated_frac": 0.0
-   },
-   "yaw_torque_coeff=max/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.2199999988079071,
-    "settle_s_p95": 0.4397999942302704,
-    "saturated_frac": 0.025875000283122063
-   },
-   "motor_tau=min/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.28200000524520874,
     "settle_s_p95": 0.2879999876022339,
     "saturated_frac": 0.0
    },
+   "thrust_max=max/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.20399999618530273,
+    "settle_s_p95": 0.45579996705055237,
+    "saturated_frac": 0.020124999806284904
+   },
+   "per_motor_thrust_imbalance=min/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.2680000066757202,
+    "settle_s_p95": 0.27399998903274536,
+    "saturated_frac": 0.0007291666697710752
+   },
+   "per_motor_thrust_imbalance=min/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.21799999475479126,
+    "settle_s_p95": 0.6050000190734863,
+    "saturated_frac": 0.03999999910593033
+   },
+   "per_motor_thrust_imbalance=max/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.26600000262260437,
+    "settle_s_p95": 0.5414999723434448,
+    "saturated_frac": 0.0
+   },
+   "per_motor_thrust_imbalance=max/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.23199999332427979,
+    "settle_s_p95": 0.45819997787475586,
+    "saturated_frac": 0.04518749564886093
+   },
+   "yaw_torque_coeff=min/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.26600000262260437,
+    "settle_s_p95": 0.2720000147819519,
+    "saturated_frac": 0.0
+   },
+   "yaw_torque_coeff=min/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.23999999463558197,
+    "settle_s_p95": 0.6462999582290649,
+    "saturated_frac": 0.045520830899477005
+   },
+   "yaw_torque_coeff=max/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.2680000066757202,
+    "settle_s_p95": 0.2720000147819519,
+    "saturated_frac": 0.0
+   },
+   "yaw_torque_coeff=max/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.21400000154972076,
+    "settle_s_p95": 0.39469999074935913,
+    "saturated_frac": 0.02120833285152912
+   },
+   "motor_tau=min/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.2800000011920929,
+    "settle_s_p95": 0.28690001368522644,
+    "saturated_frac": 0.0
+   },
    "motor_tau=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.22599999606609344,
-    "settle_s_p95": 0.5378999710083008,
-    "saturated_frac": 0.05510416999459267
+    "settle_s_median": 0.22200000286102295,
+    "settle_s_p95": 0.48079997301101685,
+    "saturated_frac": 0.04595833271741867
    },
    "motor_tau=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.25999999046325684,
-    "settle_s_p95": 0.2619999945163727,
+    "settle_s_median": 0.257999986410141,
+    "settle_s_p95": 0.25999999046325684,
     "saturated_frac": 0.0
    },
    "motor_tau=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.24199999868869781,
-    "settle_s_p95": 0.6438000202178955,
-    "saturated_frac": 0.034437499940395355
+    "settle_s_median": 0.23600000143051147,
+    "settle_s_p95": 0.5820000171661377,
+    "saturated_frac": 0.02745833434164524
    },
    "lin_drag=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.2680000066757202,
+    "settle_s_median": 0.26600000262260437,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "lin_drag=min/throw": {
     "success": 1.0,
     "settle_s_median": 0.22200000286102295,
-    "settle_s_p95": 0.47829997539520264,
-    "saturated_frac": 0.027249999344348907
+    "settle_s_p95": 0.42869997024536133,
+    "saturated_frac": 0.022479169070720673
    },
    "lin_drag=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2720000147819519,
+    "settle_s_median": 0.2680000066757202,
+    "settle_s_p95": 0.27000001072883606,
     "saturated_frac": 0.0
    },
    "lin_drag=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2160000056028366,
-    "settle_s_p95": 0.4000999927520752,
-    "saturated_frac": 0.017770832404494286
+    "settle_s_median": 0.20800000429153442,
+    "settle_s_p95": 0.3587999939918518,
+    "saturated_frac": 0.013854166492819786
    },
    "latency_s=min/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.2680000066757202,
+    "settle_s_p95": 0.2720000147819519,
+    "saturated_frac": 0.0
+   },
+   "latency_s=min/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.2540000081062317,
+    "settle_s_p95": 0.4499000012874603,
+    "saturated_frac": 0.034958332777023315
+   },
+   "latency_s=max/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.27000001072883606,
     "settle_s_p95": 0.27399998903274536,
     "saturated_frac": 0.0
    },
-   "latency_s=min/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.2639999985694885,
-    "settle_s_p95": 0.5009999871253967,
-    "saturated_frac": 0.04393749684095383
-   },
-   "latency_s=max/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.2720000147819519,
-    "settle_s_p95": 0.2759999930858612,
-    "saturated_frac": 0.0
-   },
    "latency_s=max/throw": {
     "success": 1.0,
     "settle_s_median": 0.19200000166893005,
-    "settle_s_p95": 0.42379996180534363,
-    "saturated_frac": 0.018708333373069763
+    "settle_s_p95": 0.38669994473457336,
+    "saturated_frac": 0.014749999158084393
    },
    "gyro_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "gyro_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.23399999737739563,
-    "settle_s_p95": 0.5378000140190125,
-    "saturated_frac": 0.03718750178813934
+    "settle_s_median": 0.2280000001192093,
+    "settle_s_p95": 0.48980000615119934,
+    "saturated_frac": 0.030291665345430374
    },
    "gyro_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2720000147819519,
+    "settle_s_median": 0.2680000066757202,
+    "settle_s_p95": 0.27000001072883606,
     "saturated_frac": 0.0
    },
    "gyro_noise_std=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.2160000056028366,
-    "settle_s_p95": 0.5811999440193176,
-    "saturated_frac": 0.03354166820645332
+    "settle_s_median": 0.20800000429153442,
+    "settle_s_p95": 0.5139999389648438,
+    "saturated_frac": 0.02812500111758709
    },
    "gyro_bias=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "gyro_bias=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.23800000548362732,
-    "settle_s_p95": 0.5450000166893005,
-    "saturated_frac": 0.031437501311302185
+    "settle_s_median": 0.23199999332427979,
+    "settle_s_p95": 0.48829999566078186,
+    "saturated_frac": 0.02695833332836628
    },
    "gyro_bias=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "gyro_bias=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.23199999332427979,
-    "settle_s_p95": 0.5981000065803528,
-    "saturated_frac": 0.04179166629910469
+    "settle_s_median": 0.22599999606609344,
+    "settle_s_p95": 0.5415999889373779,
+    "saturated_frac": 0.03479166328907013
    },
    "accel_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.2680000066757202,
-    "settle_s_p95": 0.2720000147819519,
+    "settle_s_median": 0.26600000262260437,
+    "settle_s_p95": 0.27090001106262207,
     "saturated_frac": 0.0
    },
    "accel_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.21799999475479126,
-    "settle_s_p95": 0.6013000011444092,
-    "saturated_frac": 0.030041664838790894
+    "settle_s_median": 0.20999999344348907,
+    "settle_s_p95": 0.5394999980926514,
+    "saturated_frac": 0.02368750050663948
    },
    "accel_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "accel_noise_std=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20200000703334808,
-    "settle_s_p95": 0.450300008058548,
-    "saturated_frac": 0.023729167878627777
+    "settle_s_median": 0.20000000298023224,
+    "settle_s_p95": 0.4122999906539917,
+    "saturated_frac": 0.01860416866838932
    },
    "vel_noise_std=min/tilt_60": {
-    "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
-    "settle_s_p95": 0.2720000147819519,
-    "saturated_frac": 0.0
-   },
-   "vel_noise_std=min/throw": {
-    "success": 1.0,
-    "settle_s_median": 0.24199999868869781,
-    "settle_s_p95": 0.5551999807357788,
-    "saturated_frac": 0.03566666692495346
-   },
-   "vel_noise_std=max/tilt_60": {
     "success": 1.0,
     "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
+   "vel_noise_std=min/throw": {
+    "success": 1.0,
+    "settle_s_median": 0.23399999737739563,
+    "settle_s_p95": 0.49629998207092285,
+    "saturated_frac": 0.02850000187754631
+   },
+   "vel_noise_std=max/tilt_60": {
+    "success": 1.0,
+    "settle_s_median": 0.26600000262260437,
+    "settle_s_p95": 0.27090001106262207,
+    "saturated_frac": 0.0
+   },
    "vel_noise_std=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.22599999606609344,
-    "settle_s_p95": 0.5233999490737915,
-    "saturated_frac": 0.03110416606068611
+    "settle_s_median": 0.21400000154972076,
+    "settle_s_p95": 0.4664999842643738,
+    "saturated_frac": 0.025041665881872177
    },
    "pos_noise_std=min/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "pos_noise_std=min/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20999999344348907,
-    "settle_s_p95": 0.5181999802589417,
-    "saturated_frac": 0.03020833432674408
+    "settle_s_median": 0.20800000429153442,
+    "settle_s_p95": 0.47589999437332153,
+    "saturated_frac": 0.025083333253860474
    },
    "pos_noise_std=max/tilt_60": {
     "success": 1.0,
-    "settle_s_median": 0.27000001072883606,
+    "settle_s_median": 0.2680000066757202,
     "settle_s_p95": 0.2720000147819519,
     "saturated_frac": 0.0
    },
    "pos_noise_std=max/throw": {
     "success": 1.0,
-    "settle_s_median": 0.20800000429153442,
-    "settle_s_p95": 0.6019999980926514,
-    "saturated_frac": 0.03787500411272049
+    "settle_s_median": 0.20600000023841858,
+    "settle_s_p95": 0.5397999882698059,
+    "saturated_frac": 0.030937502160668373
    }
   }
  },
@@ -793,6 +793,6 @@
  "tau_margin": {
   "x1.5": 1.0,
   "x2.0": 1.0,
-  "x3.0": 0.562
+  "x3.0": 0.516
  }
 }

@@ -6,7 +6,7 @@ description: ~100 mm brushed micro quad, 1S, ESP32 flight controller on a school
 
 geometry_mm:
   arm_xy: 36.0            # |x| = |y| of each motor axis (X layout): 101.8 mm motor-to-motor diagonal
-  prop_diameter: 65.0     # 2-blade push-fit prop for 0.8 mm shafts
+  prop_diameter: 65.0     # 2-blade push-fit prop (v3: 1.0 mm shaft, to match the high-speed 8520s)
   prop_band: 4.0          # axial thickness of the spinning prop (hub height)
   prop_gap_above_motor: 1.0   # motor top -> prop hub bottom (shaft stub)
   plate_thickness: 1.6    # centre plate (v2: 2.0 -> 1.6; the side rims and arm roots carry the bending)
@@ -35,7 +35,7 @@ geometry_mm:
   esp32_header_height: 8.5   # female header body: board top -> module underside
   imu_module: {x: [-5.1, 11.1], y: [-3.8, 17.1], height: 4.0}   # GY-521 on the board top, under the ESP32
   charger_module: {x: [-8.8, 17.2], y: [-21.3, -3.8], height: 4.5}   # TP4056 module on the board top, under the ESP32
-  battery_stop: {x: [-25.0, -24.0], y_centres: [-9.0, 9.0], width: 3.0, height: 4.0}   # v2: rear stops
+  battery_stop: {x: [-27.0, -26.0], y_centres: [-9.0, 9.0], width: 3.0, height: 4.0}   # rear stops (v3: 2 mm further back, CoG)
   frame_material: petg_print
   guard:                  # v2 optional clip-on prop guard (lite/frame.py guard()); checks run with and without
     fit: false
@@ -47,6 +47,18 @@ geometry_mm:
     collar_wall: 1.2
     collar_clearance: 0.1
   strap_slot: [12.0, 2.5] # battery strap slots in the centre plate
+  # v3 autonomy mounts (lite/frame.py): flow + ToF on a tail tab looking down, camera board on a
+  # nose arch that the battery slides through. fit: false gives the v2 frame back.
+  autonomy:
+    fit: true
+    tail_tab: {x: [-50.0, -24.0], half_width: 15.0, rim: 2.0}   # the modules sit on a 2 mm rim round a window
+    nose_tab: {x: [24.0, 41.0], half_width: 15.5, bar: 3.0}   # two side bars (the battery slides between them)
+    flow_module: {size: [19.0, 14.0, 3.5], centre: [-38.7, -7.5], window: 7.0}       # PMW3901 breakout, lens down
+    tof_module: {size: [18.0, 13.0, 2.5], centre: [-38.7, 8.0], window: [6.0, 4.0]}  # VL53L1X breakout, sensor down
+    arch: {x0: 39.0, thickness: 1.6, half_width: 15.5, height: 30.0,
+           opening_half_width: 13.0, opening_wall: 10.6, flank_deg: 50.0, tie_slot: [1.2, 4.0]}  # battery (25 x 8) passes under
+    camera: {size: [17.5, 21.0, 15.0], y_centre: 2.75, z0: 11.0}   # XIAO ESP32-S3 Sense [y, z, depth], camera face taped to the
+                                                                  # arch's back, lens through the opening; offset to +y to clear the USB charging plug
   min_clearance: 1.0
   prop_tip_gap: 1.0       # used as the minimum prop-to-anything gap
 
@@ -55,15 +67,20 @@ materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
   petg_print: {density: 1270, E: 2.0e+9, nu: 0.38, strength: 3.0e+7}   # v2 default: softens ~80 C vs PLA ~55-60 C (motor heat)
 
 parts:
-  motor:      {qty: 4, mass_g: 4.0,  envelope_mm: {diameter: 8.5, height: 20.0}, ref: "8520 coreless brushed, 3.7 V, 0.8 mm shaft"}
+  motor:      {qty: 4, mass_g: 4.0,  envelope_mm: {diameter: 8.5, height: 20.0}, ref: "8520 coreless brushed, high-speed (~53,000 rpm at 3.7 V), 1.0 mm shaft"}
   prop:       {qty: 4, mass_g: 0.6,  ref: "65 mm 2-blade push-fit"}
-  battery:    {qty: 1, mass_g: 16.0, x_offset: 0.5, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 25C, PH2.0 (800 mAh adds ~4 g and ~2 min)"}
+  battery:    {qty: 1, mass_g: 16.0, x_offset: -1.5, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 40C low-IR (GNB / BetaFPV class), PH2.0"}
   board:      {qty: 1, mass_g: 8.0,  ref: "school-milled 2-layer FR4 46x38x1.6 with MOSFETs, LDO, passives, headers"}
   esp32:      {qty: 1, mass_g: 6.0,  ref: "ESP32 D1 mini (classic ESP32-WROOM-32)"}
   imu:        {qty: 1, mass_g: 2.0,  ref: "MPU-6050 GY-521 breakout"}
   charger:    {qty: 1, mass_g: 2.0,  ref: "TP4056 module with protection"}
   hardware:   {qty: 1, mass_g: 1.5,  ref: "4x M2 screws, battery strap"}
   wiring:     {qty: 1, mass_g: 2.0,  ref: "motor leads, battery lead"}
+  # v3 autonomy hardware (masses: typical listings, VERIFY)
+  flow:       {qty: 1, mass_g: 1.2,  ref: "PMW3901 optical-flow breakout (SPI, 3.3 V)"}
+  tof:        {qty: 1, mass_g: 0.6,  ref: "VL53L1X ToF breakout (I2C, 3.3 V, 4 m)"}
+  camera:     {qty: 1, mass_g: 5.0,  ref: "Seeed XIAO ESP32-S3 Sense (OV2640/OV3660 camera, Wi-Fi)"}
+  autonomy_wiring: {qty: 1, mass_g: 1.5, ref: "sensor + companion leads, foam tape"}
 
 electrical:
   cells: 1
@@ -71,17 +88,19 @@ electrical:
   cell_v_full: 4.2
   cell_v_empty: 3.4       # ESP32 LDO dropout limit: land at 3.4 V under load
   capacity_mah: 600
-  c_rating_continuous: 25
+  c_rating_continuous: 40
   c_rating_burst: 40
-  pack_ir_ohm: 0.090      # 1S 600 mAh 25C, VERIFY
+  pack_ir_ohm: 0.045      # v3: 1S 600 mAh 40C low-IR pack (25C generic ~0.09), VERIFY
   usable_fraction: 0.80
   esc_continuous_a: 5.0   # AO3400A low-side switch, ~5 A with these copper areas
   esc_efficiency: 0.95    # MOSFET + Schottky losses
   avionics_w: 0.6         # ESP32 with Bluetooth active (~150 mA) + IMU + LED
+  avionics_autonomy_w: 1.4  # v3 companion: XIAO ESP32-S3 streaming VGA over Wi-Fi (~300 mA at 3.8 V, VERIFY) + PMW3901 + VL53L1X
 
 motor:   # 8520 coreless, typical listing figures (VERIFY: spin up on a bench supply and log current)
-  kv_rpm_per_v: 14000
-  rm_ohm: 0.50            # high-current 8520 variants list 0.4-0.6 ohm; gives ~35 g at 4.2 V, ~2.9 A
+  kv_rpm_per_v: 14300      # 53,000 rpm no-load at 3.7 V (8520CL listing)
+  rm_ohm: 0.50            # high-current 8520 variants list 0.4-0.6 ohm. The 8520CL stall figure (5.1 A) implies
+                          # ~0.73 ohm incl. brushes: checks.py reports that as the "worst listing" case
   i0_a: 0.15
   i0_ref_v: 3.7
   rotor_inertia_kgm2: 3.0e-9
@@ -131,4 +150,15 @@ sim:
   max_body_rate: [6.0, 6.0, 4.0]   # rad/s, angle-mode outer loop limits
   lin_drag_scale_by_mass: true     # reference drag scaled by mass (similar shape, smaller)
   angle_kp: [6.0, 6.0]     # 1/s, attitude error -> rate setpoint (ESP-Drone angle mode ~5.9)
-  sensing: imu_only        # filtered gyro + Mahony on the accelerometer; no flow/ToF/baro
+  sensing: imu_only        # angle mode: filtered gyro + Mahony on the accelerometer
+  # v3 position hold (lite/autonomy.py == lite_fc PositionHold): flow + ToF KF from neuroflight-fc
+  pos_hold:
+    kp_pos: [1.6, 1.6, 2.0]       # 1/s   position error -> velocity (gains close to neuroflight-fc CascadedPID)
+    kp_vel: [4.0, 4.0, 5.0]       # 1/s   velocity error -> acceleration
+    ki_vel: [0.4, 0.4, 3.0]       # 1/s^2 integrator (wind, CoG offset, thrust-model error: z needs the authority)
+    i_limit: [2.0, 2.0, 4.0]      # m/s^2
+    v_max: [1.5, 1.5, 1.0]        # m/s when returning to the hold point (commands are limited to cmd_v_max)
+    cmd_v_max: [1.0, 1.0, 0.6]    # m/s, stick / companion velocity commands
+    a_max_xy: 4.0                 # m/s^2 (~22 deg of tilt)
+    max_tilt_rad: 0.5             # 29 deg
+    flow_hz: 100                  # PMW3901 rate; the KF also runs the ToF at this rate

@@ -5,6 +5,7 @@
 
 #include "angle_fixture.hpp"
 #include "lite/flight_core.hpp"
+#include "lite_sim.hpp"
 #include "nftest.hpp"
 
 using namespace lite;
@@ -13,86 +14,6 @@ using nf::Vec3;
 
 #define NEAR(a, b, tol) CHECK(std::fabs((a) - (b)) <= (tol))
 
-// ---------------------------------------------------------------- tiny rigid-body sim
-// Same physics as neuroflight-fc fw/core/tests/quad_sim.hpp, on the Lite's vehicle params.
-struct Sim {
-  Vec3 p{0, 0, 0}, v{}, omega{};
-  Quat q{};
-  float w[4] = {0, 0, 0, 0};
-  Vec3 acc_w{};
-  Vec3 ext_torque{};
-  bool ground = true;
-  float thrust(float wi) const {
-    const float a = nf::vehicle::kThrustCurveA;
-    return nf::vehicle::kThrustMax * (a * wi * wi + (1 - a) * wi);
-  }
-  void step(const float cmd[4], float dt) {
-    using namespace nf::vehicle;
-    const int sub = 4;
-    const float h = dt / sub;
-    for (int s = 0; s < sub; ++s) {
-      float T[4];
-      for (int i = 0; i < 4; ++i) {
-        const float c = nf::clampf(cmd[i], 0.0f, 1.0f);
-        const float tau = c > w[i] ? kMotorTauUp : kMotorTauDown;
-        w[i] += (c - w[i]) * (h / tau);
-        T[i] = thrust(w[i]);
-      }
-      const float a = kArmXy, k = kYawTorqueCoeff;
-      Vec3 tau{a * (T[0] - T[1] - T[2] + T[3]), a * (-T[0] - T[1] + T[2] + T[3]), k * (T[0] - T[1] + T[2] - T[3])};
-      tau += ext_torque;
-      const Vec3 J{kInertia[0], kInertia[1], kInertia[2]};
-      Vec3 wd = tau - nf::cross(omega, nf::hadamard(J, omega));
-      wd = {wd.x / J.x, wd.y / J.y, wd.z / J.z};
-      omega += wd * h;
-      q = q.integrated(omega, h);
-      const float F = T[0] + T[1] + T[2] + T[3];
-      const Vec3 vb = q.rotate_inv(v);
-      const Vec3 fb = Vec3{0, 0, F} - nf::hadamard(Vec3{kLinDrag[0], kLinDrag[1], kLinDrag[2]}, vb);
-      Vec3 acc = q.rotate(fb) / kMass + Vec3{0, 0, -kGravity};
-      v += acc * h;
-      p += v * h;
-      if (ground && p.z <= 0.0f) {
-        p.z = 0.0f;
-        if (v.z < 0) v.z = 0;
-        v.x *= 0.9f; v.y *= 0.9f;
-        omega = omega * 0.9f;
-        acc = {0, 0, 0};
-      }
-      acc_w = acc;
-    }
-  }
-  ImuSample imu() const {
-    ImuSample s;
-    s.gyro = omega + Vec3{0.01f, -0.008f, 0.005f};  // constant bias: the calibrator must remove it
-    s.accel = q.rotate_inv(acc_w + Vec3{0, 0, nf::vehicle::kGravity});
-    return s;
-  }
-};
-
-struct Rig {
-  FlightCore fc;
-  Sim sim;
-  Sticks st;
-  uint32_t ms = 0;
-  CoreOutput out;
-  Rig() { fc.init(); st.connected = true; }
-  // hold = the drone is held still in the hand (calibration before an in-air test)
-  void run(float seconds, float vbat = 3.9f, bool hold = false) {
-    const int n = static_cast<int>(seconds * nf::vehicle::kRateLoopHz);
-    for (int i = 0; i < n; ++i) {
-      out = fc.step(sim.imu(), st, vbat, ms);
-      if (!hold) sim.step(out.motor, 1.0f / nf::vehicle::kRateLoopHz);
-      ms += 1;
-    }
-  }
-  void arm(bool hold = false) {
-    st.arm = true; run(0.01f, 3.9f, hold); st.arm = false; run(0.01f, 3.9f, hold);
-  }
-  void calibrate_in_hand() { run(1.5f, 3.9f, true); arm(true); }
-};
-
-static float deg(float r) { return r * 57.29578f; }
 
 // ---------------------------------------------------------------- unit tests
 TEST(sticks_mapping) {

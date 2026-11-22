@@ -294,6 +294,46 @@ def battery_detail(spec):
     return out
 
 
+def autonomy_detail(spec):
+    """v3: PMW3901 flow and VL53L1X ToF breakouts on the tail tab (lens / sensor looking down
+    through the rim windows), XIAO ESP32-S3 Sense standing behind the nose arch, camera forward."""
+    g, d = spec["geometry_mm"], dims(spec)
+    au = g.get("autonomy", {})
+    if not au.get("fit"):
+        return []
+    out, t = [], d["t"]
+    for key, owner, label, chip in (("flow_module", "flow", "PMW3901 optical-flow breakout", "PMW3901 + lens"),
+                                    ("tof_module", "tof", "VL53L1X time-of-flight breakout", "VL53L1X")):
+        m = au[key]
+        (sx, sy, sz), (cx, cy) = m["size"], m["centre"]
+        z_lo, z_hi = t, t + sz   # sits on the tab; chip + lens under the PCB, looking down the window
+        out.append(DPart(label, "autonomy", _box(cx - sx / 2 + 0.1, cx + sx / 2 - 0.1, cy - sy / 2 + 0.1, cy + sy / 2 - 0.1,
+                                                 z_hi - 1.1, 1.0), 0x6C3483 if owner == "flow" else BLUE_PCB, 0.1, 0.55, owner))
+        if owner == "flow":
+            out.append(DPart(chip, "autonomy", Pos(cx, cy, z_lo + 0.1) * Cylinder(2.6, z_hi - 1.1 - z_lo - 0.1, align=C), BLACK, 0.0, 0.3, owner))
+            out.append(DPart("Flow lens glass", "autonomy", Pos(cx, cy, z_lo + 0.1) * Cylinder(1.4, 0.3, align=C), 0x5DADE2, 0.3, 0.1, owner, opacity=0.8))
+        else:
+            out.append(DPart(chip, "autonomy", _box(cx - 2.4, cx + 2.4, cy - 1.2, cy + 1.2, z_hi - 1.1 - 1.3, 1.3), BLACK, 0.0, 0.4, owner))
+    cam = au["camera"]
+    cy_, cz_, cdep = cam["size"]
+    x1 = au["arch"]["x0"]
+    x0 = x1 - cdep
+    yc, z0 = cam["y_centre"], cam["z0"]
+    ylo, yhi, zlo, zhi = yc - cy_ / 2 + 0.1, yc + cy_ / 2 - 0.1, z0 + 0.1, z0 + cz_ - 0.1
+    zc = z0 + cz_ / 2
+    pcb = lambda xa, xb: Pos((xa + xb) / 2, yc, zlo) * Box(xb - xa, yhi - ylo, zhi - zlo, align=C)
+    out.append(DPart("XIAO ESP32-S3 (main board)", "autonomy", pcb(x0 + 0.2, x0 + 1.4), BLUE_PCB, 0.1, 0.55, "camera"))
+    out.append(DPart("ESP32-S3 module shield", "autonomy", Pos(x0 + 2.4, yc, zlo + 1.0) * Box(2.0, 12.5, 13.0, align=C), SILVER, 0.9, 0.3, "camera"))
+    out.append(DPart("USB-C (programming)", "autonomy", Pos(x0 + 2.4, yc, zhi - 3.3) * Box(2.0, 8.9, 3.2, align=C), SILVER, 0.9, 0.3, "camera"))
+    out.append(DPart("Sense expansion board", "autonomy", pcb(x0 + 6.0, x0 + 7.2), BLACK_PCB, 0.1, 0.55, "camera"))
+    out.append(DPart("OV2640 camera module", "autonomy", Pos(x0 + 9.2, yc, zc + 2.5 - 4.25) * Box(4.0, 8.5, 8.5, align=C), BLACK, 0.0, 0.5, "camera"))
+    out.append(DPart("Camera lens", "autonomy", Pos(x0 + 11.2, yc, zc + 2.5) * Rot(0, 90, 0) * Cylinder(3.2, x1 - 0.1 - x0 - 11.2, align=C),
+                     DARK, 0.2, 0.25, "camera"))
+    out.append(DPart("Camera lens glass", "autonomy", Pos(x1 - 0.5, yc, zc + 2.5) * Rot(0, 90, 0) * Cylinder(2.0, 0.35, align=C),
+                     0x5DADE2, 0.3, 0.1, "camera", opacity=0.8))
+    return out
+
+
 # ------------------------------------------------------------------ assembly
 def build_detail(spec=None, with_guard=True):
     spec = spec or load_spec()
@@ -303,6 +343,7 @@ def build_detail(spec=None, with_guard=True):
         parts += motor_detail(spec, i, x, y)
         parts += prop_detail(spec, i, x, y)
     parts += board_detail(spec) + esp32_detail(spec) + imu_detail(spec) + charger_detail(spec) + battery_detail(spec)
+    parts += autonomy_detail(spec)
     if with_guard:
         parts.append(DPart(f"Clip-on prop guard (optional, {g['guard']['height']:.0f} mm PETG)", "guard", guard(spec), PETG_GUARD, 0.0, 0.6))
     for i, (x, y) in enumerate(motor_xy(spec)):

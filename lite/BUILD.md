@@ -51,3 +51,46 @@ Two of the mounting screws (H3 and H4) must be **low button-head M2** screws.
 - Squeeze the trigger smoothly to about 60 %. It should lift off and stay level.
 - If it wobbles fast, the rate gains are too high for your motors. Lower `kp`/`kd` in `RatePidConfig`. The sim shows the stock gains hold with motors up to 2× slower than estimated.
 - If it slowly leans in a direction, that's the accelerometer-only attitude estimate (expected). Correct it with the stick.
+
+## 6. v3 autonomy kit (optional): position hold and AprilTag vision
+This adds three small boards. The drone then holds its position by itself, and a laptop can fly it relative to a printed AprilTag: follow it, approach and land in front of it, or turn to search for it. The flight board itself does not change.
+
+| Part | What it does | Approx. cost |
+|---|---|---|
+| PMW3901 optical-flow breakout (19 × 14 mm class) | sees the floor move: horizontal speed | $10-15 |
+| VL53L1X time-of-flight breakout (18 × 13 mm class) | height above the floor | $5-8 |
+| Seeed XIAO ESP32-S3 **Sense** (with the camera board) | reads both sensors, streams the camera over Wi-Fi, relays laptop commands | $14-16 |
+| 30 AWG silicone wire, 2 zip ties | | |
+
+This puts the build at roughly $60-75, above the original $50 target. With the kit fitted the drone weighs 77.9 g and flies about 6 min (the camera's Wi-Fi costs about 0.6 min). On pessimistic motors, leave the prop guard off: with both fitted the thrust-to-weight is only 1.18.
+
+**Mounting** (the v3 `frame.stl` has the mounts built in):
+- Flow and ToF boards go on the tail tab, **sensor side down**, over the two windows. The flow board goes on the window on the drone's right (-y), the ToF board on its left. Fix them with a dot of hot glue or double-sided foam at the corners. Keep glue off the lens and the ToF aperture.
+- The XIAO stands upright behind the nose arch, with the camera looking forward through the arch opening and USB-C at the top. Tie it with the two zip ties through the arch slots.
+
+**Wiring** (keep the leads short and run them along the arms):
+
+| From | To | Notes |
+|---|---|---|
+| VBAT / GND at the C1 capacitor pads (top side) | XIAO **BAT+ / BAT-** pads (underside) | powers the XIAO from the 1S pack. Don't charge through the XIAO's USB and the TP4056 at the same time. |
+| XIAO 3V3 / GND | PMW3901 VCC / GND, VL53L1X VIN / GND | |
+| XIAO D8 / D9 / D10 (SCK / MISO / MOSI), D1 | PMW3901 SCK / MISO / MOSI, CS | |
+| XIAO D4 / D5 (SDA / SCL) | VL53L1X SDA / SCL | |
+| XIAO D6 (TX) | ESP32 MiniKit **IO27** | companion data to the flight board |
+| XIAO D7 (RX) | ESP32 MiniKit **IO25** | telemetry back to the XIAO |
+
+IO25 and IO27 are free outer-row pins on the MiniKit. If your MiniKit's silkscreen differs, use any of 25, 27, 32 or 33 and change `kCompRxPin` / `kCompTxPin` in `lite_fc.ino`.
+
+**Firmware:** flash `lite/firmware/companion/companion.ino` to the XIAO (see `lite/firmware/README.md`), then re-flash `lite_fc.ino`. Without the XIAO, the flight board behaves exactly like v2.
+
+**Flow calibration (slide test, props off).** Open the XIAO's serial monitor at 115200 baud.
+1. Hold the drone level about 30 cm above a textured floor (a rug or wood grain, not plain tiles). `range` should read about 300 mm.
+2. Type `r`, then slide the drone 1.00 m **forward** along a tape measure, without tilting it. `slide x` should read about +1.0 and `slide y` about 0.
+3. Type `r` and slide it 1.00 m to the **left**. `slide y` should read about +1.0.
+4. If a sign is wrong or x/y are swapped, change `sign_x`, `sign_y` or `swap_xy` in `lite/companion.hpp` (`FlowConfig`). If the distance is off by a constant factor, scale `rad_per_count`. Then re-flash the XIAO.
+
+**First autonomous flight:**
+1. Arm and take off in angle mode as before, to about 1 m.
+2. Press **A**: position hold. Release the trigger. The drone should hold its spot within about 10-15 cm. The right stick now moves it (up to 1 m/s) and the left stick y climbs or descends. **X** returns to angle mode (only with the trigger pulled, so it can't drop).
+3. If the flow or height sensor drops out, the drone switches to height-only hold or lands. If you lose the controller in a hold mode, it lands. **B kills the motors in every mode.**
+4. For vision: tape a printed tag (`python -m lite.ground.make_tags 0`) on a wall at about 1 m height. Start the ground station (`lite/ground/README.md`), hover in position hold facing the tag, press **Y** (AUTO), then press **G** in the station window.

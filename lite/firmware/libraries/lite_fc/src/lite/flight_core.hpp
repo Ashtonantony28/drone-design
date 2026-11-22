@@ -7,6 +7,9 @@
 //   500 Hz: angle mode (same law as lite/fly.py AngleMode) -> body-rate setpoint, collective
 //   1 kHz: nf::RatePid -> nf::Mixer -> motor commands in [0, 1]
 //   arming / failsafe state machine (Arming below)
+//   v3 (flow + ToF via the companion board, AuxInput): nf::TranslationKf at 1 kHz with
+//   corrections per sensor frame, KF-referenced Mahony, and the Autopilot of
+//   lite/autonomy.hpp (position hold, altitude hold, land, AUTO) in place of angle mode.
 //
 // Body frame FLU (x forward, y left, z up). Motor order (neuroflight):
 //   0 front-left, 1 front-right, 2 rear-right, 3 rear-left.
@@ -20,6 +23,7 @@
 #include "nf/filters.hpp"
 #include "nf/math.hpp"
 #include "nf/vehicle_params.hpp"
+#include "lite/autonomy.hpp"
 
 namespace lite {
 
@@ -31,6 +35,10 @@ struct Sticks {
   float yaw = 0.0f;       // [-1, 1] left stick x,  + = clockwise seen from above
   bool arm = false;       // arm button held (Menu)
   bool kill = false;      // kill button held (B)
+  float climb = 0.0f;     // [-1, 1] left stick y, + = up (hold modes)
+  bool btn_hold = false;  // A held: position hold
+  bool btn_angle = false; // X held: angle mode (manual)
+  bool btn_auto = false;  // Y held: AUTO (laptop commands)
   bool connected = false;
   uint32_t age_ms = 0;    // time since the last controller packet
 };
@@ -78,6 +86,7 @@ enum Flag : uint32_t {
   LINK_LOST = 1u << 7,       // disarmed: controller silent for link_timeout_ms
   KILLED = 1u << 8,          // disarmed by the kill button
   IDLE_TIMEOUT = 1u << 9,    // disarmed: armed at zero throttle for idle_disarm_ms
+  LANDED = 1u << 10,         // disarmed: the LAND mode's landing detector fired
 };
 
 struct ArmingConfig {
@@ -97,6 +106,8 @@ struct ArmingInputs {
   float vbat = 4.2f;   // V
   Sticks sticks{};
   uint32_t now_ms = 0;
+  bool hold_mode = false;  // an autopilot mode flies the drone: link loss lands (Autopilot),
+                           // and zero trigger is not idle
 };
 
 class Arming {
@@ -106,6 +117,7 @@ class Arming {
   State state() const { return state_; }
   uint32_t flags() const { return flags_; }      // current refusal / warning reasons
   uint32_t last_disarm() const { return last_disarm_; }
+  void force_disarm(uint32_t why) { if (state_ == State::ARMED) disarm(why); }
 
  private:
   void disarm(uint32_t why);
@@ -122,6 +134,14 @@ struct ImuSample {
   nf::Vec3 accel{};  // m/s^2 specific force, body FLU (level at rest: [0, 0, +g])
 };
 
+// v3 sensors and commands from the companion board (all optional).
+struct AuxInput {
+  bool sample_new = false;   // a SENS frame arrived since the last step
+  nf::FlowSample flow{};
+  nf::RangeSample range{};
+  CompanionInput comp{};     // laptop command (relayed by the companion)
+};
+
 struct CoreOutput {
   float motor[4] = {0, 0, 0, 0};  // duty in [0, 1], neuroflight motor order
   State state = State::CALIBRATING;
@@ -129,15 +149,23 @@ struct CoreOutput {
   float tilt = 0.0f;              // rad
   nf::Quat q{};                   // attitude estimate
   bool saturated = false;
+  Mode mode = Mode::ANGLE;
+  nf::Vec3 pos{}, vel{};          // KF estimate
+  bool height_valid = false, flow_valid = false;
+  bool refused = false;           // a mode button was refused (rumble)
 };
 
 class FlightCore {
  public:
   void init();
-  CoreOutput step(const ImuSample& imu, const Sticks& sticks, float vbat, uint32_t now_ms);
+  CoreOutput step(const ImuSample& imu, const Sticks& sticks, float vbat, uint32_t now_ms,
+                  const AuxInput* aux = nullptr);
   const nf::Mahony& mahony() const { return mahony_; }
+  const nf::TranslationKf& kf() const { return kf_; }
+  const Autopilot& autopilot() const { return ap_; }
   StickConfig sticks_cfg{};
   AngleConfig angle_cfg{};
+  ArmingConfig arming_cfg{};
 
  private:
   nf::GyroCalibrator cal_{};
@@ -147,6 +175,27 @@ class FlightCore {
   nf::Mixer mixer_{};
   Arming arming_{};
   nf::CtbrCommand cmd_{};
+  // v3 estimator + autopilot
+  struct Age {  // time since the KF last accepted a measurement (exact once past the KF's 0.2 s)
+    float age = 1e3f;
+    bool was_valid = false;
+    void update(bool valid, float dt) {
+      if (valid) { age = 0.0f; } else { age = was_valid ? 0.2f : age + dt; }
+      was_valid = valid;
+    }
+  };
+  nf::Vec3 accel_ref() const;
+  nf::TranslationKf kf_{};
+  nf::Pt1Vec3 acc_lpf_{};
+  nf::Pt1 acc_ref_[3];
+  nf::Vec3 prev_kf_vel_{};
+  Age flow_age_{}, height_age_{};
+  Autopilot ap_{};
+  AutopilotOutput ap_out_{};
+  bool btn_prev_[3] = {true, true, true};  // buttons must be released once after boot
+  bool btn_edge_[3] = {false, false, false};
+  bool armed_prev_ = false;
+  CompanionInput comp_{};  // latched between outer-loop steps (a CMD frame is never dropped)
   uint32_t tick_ = 0;
   bool attitude_seeded_ = false;
   float dt_ = 1.0f / nf::vehicle::kRateLoopHz;

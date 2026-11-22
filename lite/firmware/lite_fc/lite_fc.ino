@@ -10,14 +10,24 @@
 //
 // Controls (Xbox): right trigger = throttle, right stick = tilt (roll/pitch), left stick x = yaw,
 //   Menu = arm (throttle at zero, drone level and still), B = kill (any time).
-// Failsafe: controller silent for 250 ms, tilted past 75 deg for 0.3 s, or zero throttle for 5 s
-// -> motors off. Battery below 3.5 V: controller rumbles, LED double-blinks; below 3.3 V: won't arm.
+// v3 (companion board fitted): A = position hold, X = angle mode (manual), Y = AUTO (laptop);
+//   in the hold modes the right stick is velocity, the left stick y climbs, the trigger is ignored.
+// Failsafe: angle mode: controller silent for 250 ms, tilted past 75 deg for 0.3 s, or zero throttle
+// for 5 s -> motors off. Hold modes: controller silent -> LAND; flow lost -> ALT_HOLD; height lost
+// -> LAND; laptop silent in AUTO -> hover, then POS_HOLD. Battery below 3.5 V: controller rumbles,
+// LED double-blinks; below 3.3 V: won't arm.
+//
+// Companion (XIAO ESP32-S3 Sense, v3): UART2 at 115200, frames of lite/autonomy.hpp (link::).
+// It sends SENS (PMW3901 flow + VL53L1X range, 100 Hz) and relays CMD from the laptop; this
+// board sends TELEM at 25 Hz. Without the companion the board flies exactly like v2.
 //
 // Pin map: lite/ecad/MILLING.md (ESP32 MiniKit inner rows).
 #include <Arduino.h>
 #include <Bluepad32.h>
 #include <Wire.h>
 
+#include <lite_fc.h>  // library discovery (see lite_fc.h)
+#include "lite/autonomy.hpp"
 #include "lite/flight_core.hpp"
 
 // ------------------------------------------------------------------ pins
@@ -29,6 +39,11 @@ static const float kVbatDivider = (100.0f + 47.0f) / 47.0f;
 static const int kSdaPin = 21, kSclPin = 22;
 static const uint32_t kPwmHz = 20000;    // above hearing; the AO3400A switches this easily
 static const int kPwmBits = 10;
+// companion UART: ESP32 MiniKit outer-row pins, wired by hand (BUILD.md "v3 wiring"); any free
+// GPIO works (25, 27, 32, 33), change these two if you solder elsewhere
+static const int kCompRxPin = 27;        // <- XIAO D6 (TX)
+static const int kCompTxPin = 25;        // -> XIAO D7 (RX)
+static const uint32_t kCompBaud = 115200;
 
 // IMU mounting: sensor axes -> body FLU. VERIFY on the built board (BUILD.md step "IMU check"):
 // flat on the desk the serial monitor must show acc z ~ +9.8; nose up -> pitch negative.
@@ -115,6 +130,8 @@ static lite::CoreOutput g_out;           // written by the control task, read by
 static float g_vbat = 4.0f;
 static lite::ImuSample g_imu;
 static volatile uint32_t g_overruns = 0, g_imu_errors = 0;
+static volatile uint32_t g_sens_frames = 0, g_cmd_frames = 0;
+static uint16_t g_cmd_seq = 0;
 static volatile int g_spin_motor = -1;   // bench test: motor index, or -1
 static volatile float g_spin_duty = 0.0f;
 static volatile uint32_t g_spin_until = 0;
@@ -122,11 +139,47 @@ static volatile uint32_t g_spin_until = 0;
 static lite::FlightCore g_core;
 static ControllerPtr g_ctl = nullptr;
 
+// ------------------------------------------------------------------ companion link (read on core 1)
+static lite::link::Parser g_parser;
+
+// Drain the UART; fill aux with the newest SENS / CMD frames.
+static void companion_poll(lite::AuxInput& aux, uint32_t now, uint32_t& last_cmd_ms) {
+  aux.sample_new = false;
+  aux.comp.cmd_new = false;
+  int budget = 128;  // bytes per tick (115200 baud = 11.5 bytes/ms)
+  while (budget-- > 0 && Serial2.available() > 0) {
+    if (!g_parser.push((uint8_t)Serial2.read())) continue;
+    if (g_parser.type() == lite::link::SENS) {
+      lite::link::Sens s;
+      if (!lite::link::decode_sens(g_parser.payload(), g_parser.len(), s)) continue;
+      aux.sample_new = true;
+      aux.flow.flow_x = s.flow_x_mrad * 0.001f;
+      aux.flow.flow_y = s.flow_y_mrad * 0.001f;
+      aux.flow.quality = s.quality / 255.0f;
+      aux.flow.valid = (s.flags & lite::link::FLOW_OK) != 0;
+      aux.range.range_m = s.range_mm * 0.001f;
+      aux.range.valid = (s.flags & lite::link::RANGE_OK) != 0;
+      ++g_sens_frames;
+    } else if (g_parser.type() == lite::link::CMD) {
+      lite::link::Cmd c;
+      if (!lite::link::decode_cmd(g_parser.payload(), g_parser.len(), c)) continue;
+      aux.comp.cmd = c;
+      aux.comp.cmd_new = true;
+      last_cmd_ms = now;
+      ++g_cmd_frames;
+    }
+  }
+  aux.comp.cmd_age_s = (now - last_cmd_ms) * 0.001f;
+}
+
 // ------------------------------------------------------------------ control task (core 1, 1 kHz)
 static void control_task(void*) {
   TickType_t wake = xTaskGetTickCount();
   float vbat_f = 4.0f;
   uint32_t n = 0;
+  lite::AuxInput aux;
+  uint32_t last_cmd_ms = 0;
+  bool companion_seen = false;
   for (;;) {
     lite::ImuSample imu;
     if (!mpu_read(imu)) {
@@ -144,7 +197,9 @@ static void control_task(void*) {
     st.age_ms = now - g_last_packet_ms;
     portEXIT_CRITICAL(&g_mux);
 
-    const lite::CoreOutput out = g_core.step(imu, st, vbat_f, now);
+    companion_poll(aux, now, last_cmd_ms);
+    companion_seen |= aux.sample_new;
+    const lite::CoreOutput out = g_core.step(imu, st, vbat_f, now, companion_seen ? &aux : nullptr);
     const bool spin = out.state != lite::State::ARMED && g_spin_motor >= 0 && (int32_t)(g_spin_until - now) > 0;
     for (int i = 0; i < 4; ++i) motor_write(i, spin ? (i == g_spin_motor ? g_spin_duty : 0.0f) : out.motor[i]);
     if (!spin) g_spin_motor = -1;
@@ -191,6 +246,10 @@ static void read_controller() {
   s.yaw = g_ctl->axisX() / 512.0f;
   s.arm = (g_ctl->miscButtons() & kMiscStart) != 0;
   s.kill = g_ctl->b();
+  s.climb = -g_ctl->axisY() / 512.0f;        // left stick up = climb (hold modes)
+  s.btn_hold = g_ctl->a();
+  s.btn_angle = g_ctl->x();
+  s.btn_auto = g_ctl->y();
   portENTER_CRITICAL(&g_mux);
   g_sticks = s;
   g_last_packet_ms = millis();
@@ -232,8 +291,27 @@ static void serial_commands() {
   }
 }
 
+static void send_telemetry(const lite::CoreOutput& o, float vbat) {
+  lite::link::Telem t;
+  t.mode = (uint8_t)o.mode;
+  t.state = (uint8_t)o.state;
+  t.flags = (uint16_t)o.flags;
+  const float p[3] = {o.pos.x, o.pos.y, o.pos.z}, v[3] = {o.vel.x, o.vel.y, o.vel.z};
+  for (int i = 0; i < 3; ++i) {
+    t.pos_cm[i] = (int16_t)nf::clampf(p[i] * 100.0f, -32000.0f, 32000.0f);
+    t.vel_cms[i] = (int16_t)nf::clampf(v[i] * 100.0f, -32000.0f, 32000.0f);
+  }
+  t.yaw_mrad = (int16_t)(o.q.yaw() * 1000.0f);
+  t.vbat_mv = (uint16_t)(vbat * 1000.0f);
+  t.cmd_seq = g_cmd_seq;
+  uint8_t buf[lite::link::kTelemLen + lite::link::kOverhead];
+  const size_t len = lite::link::encode_telem(t, buf);
+  if (Serial2.availableForWrite() >= (int)len) Serial2.write(buf, len);
+}
+
 void setup() {
   Serial.begin(115200);
+  Serial2.begin(kCompBaud, SERIAL_8N1, kCompRxPin, kCompTxPin);
   pinMode(kLedPin, OUTPUT);
   motors_init();
   for (int i = 0; i < 4; ++i) motor_write(i, 0.0f);
@@ -265,6 +343,17 @@ void loop() {
   led_update(o, now);
   serial_commands();
 
+  static uint32_t last_telem = 0;
+  if (now - last_telem >= 40) {   // 25 Hz to the companion (the laptop's view of the drone)
+    last_telem = now;
+    g_cmd_seq = g_core.autopilot().last_cmd_seq();
+    send_telemetry(o, vbat);
+  }
+  static uint32_t last_refuse = 0;
+  if (g_ctl && o.refused && now - last_refuse > 500) {  // mode button refused: short buzz
+    g_ctl->playDualRumble(0, 150, 0xC0, 0x00);
+    last_refuse = now;
+  }
   static uint32_t last_rumble = 0;
   if (g_ctl && (o.flags & lite::BATTERY_LOW) && now - last_rumble > 10000) {
     g_ctl->playDualRumble(0, 400, 0x80, 0x40);
@@ -274,9 +363,14 @@ void loop() {
   if (now - last_print > 500) {
     last_print = now;
     static const char* names[] = {"CALIBRATING", "DISARMED", "ARMED"};
-    Serial.printf("%s flags 0x%03lx vbat %.2f roll %.1f pitch %.1f acc %.1f %.1f %.1f overruns %lu imu_err %lu\n",
-                  names[(int)o.state], (unsigned long)o.flags, vbat, o.q.roll() * 57.3f, o.q.pitch() * 57.3f,
-                  imu.accel.x, imu.accel.y, imu.accel.z, (unsigned long)g_overruns, (unsigned long)g_imu_errors);
+    Serial.printf("%s %s flags 0x%03lx vbat %.2f roll %.1f pitch %.1f acc %.1f %.1f %.1f overruns %lu imu_err %lu\n",
+                  names[(int)o.state], lite::mode_name(o.mode), (unsigned long)o.flags, vbat, o.q.roll() * 57.3f,
+                  o.q.pitch() * 57.3f, imu.accel.x, imu.accel.y, imu.accel.z, (unsigned long)g_overruns,
+                  (unsigned long)g_imu_errors);
+    if (g_sens_frames)
+      Serial.printf("  companion: sens %lu cmd %lu crc_err %lu | pos %.2f %.2f %.2f m  h_ok %d flow_ok %d\n",
+                    (unsigned long)g_sens_frames, (unsigned long)g_cmd_frames, (unsigned long)g_parser.crc_errors(),
+                    o.pos.x, o.pos.y, o.pos.z, o.height_valid, o.flow_valid);
   }
   delay(2);
 }

@@ -2,6 +2,11 @@
  "failures": [],
  "tightest_gaps": [
   [
+   1.0,
+   "board",
+   "camera"
+  ],
+  [
    1.4,
    "board",
    "battery"
@@ -12,27 +17,42 @@
    "charger"
   ],
   [
-   4.0,
-   "charger",
-   "esp32"
-  ],
-  [
-   4.5,
-   "esp32",
-   "imu"
-  ],
-  [
-   4.6,
-   "charger",
+   1.75,
+   "camera",
    "battery"
   ],
   [
-   4.6,
-   "imu",
+   2.0,
+   "flow",
+   "tof"
+  ],
+  [
+   3.7,
+   "flow",
    "battery"
   ]
  ],
  "prop_gaps": [
+  [
+   1.5,
+   "prop_0",
+   "camera"
+  ],
+  [
+   1.5,
+   "prop_1",
+   "camera"
+  ],
+  [
+   3.5,
+   "prop_0",
+   "frame"
+  ],
+  [
+   3.5,
+   "prop_1",
+   "frame"
+  ],
   [
    4.8,
    "prop_0",
@@ -42,26 +62,6 @@
    4.8,
    "prop_1",
    "esp32"
-  ],
-  [
-   4.8,
-   "prop_2",
-   "esp32"
-  ],
-  [
-   4.8,
-   "prop_3",
-   "esp32"
-  ],
-  [
-   7.0,
-   "prop",
-   "adjacent prop"
-  ],
-  [
-   11.0,
-   "prop_0",
-   "frame"
   ]
  ],
  "lowest": [
@@ -70,42 +70,42 @@
    "frame"
   ],
   [
-   2.1,
-   "battery"
+   1.6,
+   "flow"
   ],
   [
-   11.5,
-   "board"
+   1.6,
+   "tof"
   ]
  ],
- "frame_print_g": 11.26,
- "mass_g": 67.16,
+ "frame_print_g": 13.65,
+ "mass_g": 77.85,
  "cog_mm": [
-  0.55,
-  0.21,
-  14.21
+  1.35,
+  0.3,
+  14.13
  ],
  "inertia_kgm2": [
   [
-   4.182075874077087e-05,
-   7.433301202610914e-09,
-   -1.6046597554956503e-07
+   4.345028073920007e-05,
+   -5.328079058105844e-07,
+   -2.8584189336744466e-06
   ],
   [
-   7.433301202610914e-09,
-   4.3816718792364214e-05,
-   -2.6717622104335024e-07
+   -5.328079058105844e-07,
+   5.614776194259041e-05,
+   -4.1578582749430804e-07
   ],
   [
-   -1.6046597554956503e-07,
-   -2.6717622104335024e-07,
-   7.294412801757283e-05
+   -2.8584189336744466e-06,
+   -4.1578582749430804e-07,
+   8.476610901120995e-05
   ]
  ],
  "mass_items_g": [
   [
    "frame",
-   11.26
+   13.65
   ],
   [
    "motor_0",
@@ -140,6 +140,18 @@
    2.0
   ],
   [
+   "flow",
+   1.2
+  ],
+  [
+   "tof",
+   0.6
+  ],
+  [
+   "camera",
+   5.0
+  ],
+  [
    "battery",
    16.0
   ],
@@ -166,58 +178,69 @@
   [
    "wiring",
    2.0
+  ],
+  [
+   "autonomy_wiring",
+   1.5
   ]
  ],
  "arm_xy_m": 0.036,
  "arm": {
   "lever_mm": 21.2,
-  "crash_stress_mpa": 14.0,
-  "crash_sf": 2.15
+  "crash_stress_mpa": 16.2,
+  "crash_sf": 1.85
  },
  "propulsion": {
   "nominal": {
-   "mass_kg": 0.06715891620804257,
-   "thrust_to_weight_nominal": 1.7269823602319343,
-   "thrust_to_weight_empty": 1.5462362621085186,
-   "hover_time_min": 8.302935750561085,
-   "thrust_max_n": 0.2844465015368399,
-   "thrust_curve_a": 0.032661840583430274,
-   "yaw_torque_coeff_m": 0.00544477436893326,
-   "motor_tau_hover_s": 0.002571647638020868,
+   "mass_kg": 0.07785219289031697,
+   "thrust_to_weight_nominal": 1.7646232174779133,
+   "thrust_to_weight_empty": 1.5758227297111318,
+   "hover_time_min": 6.099969594768644,
+   "thrust_max_n": 0.3369239278770291,
+   "thrust_curve_a": 0.2431466598583533,
+   "yaw_torque_coeff_m": 0.005444774368933262,
+   "motor_tau_hover_s": 0.0025209552286504645,
    "failures": [],
-   "hover_throttle": 0.5616347772856766,
-   "wot_motor_current_a": 2.8006911342758394,
-   "thrust_max_g": 28.995565905896015
+   "hover_throttle": 0.6000908136875631,
+   "wot_motor_current_a": 3.39018748007763,
+   "thrust_max_g": 34.34494677645556
   },
   "pessimistic": {
-   "mass_kg": 0.0705168620184447,
-   "thrust_to_weight_nominal": 1.2249564789961036,
-   "thrust_to_weight_empty": 1.0989447763092721,
-   "hover_time_min": 4.247531304694902,
-   "thrust_max_n": 0.2118471633870418,
-   "thrust_curve_a": -0.024666169758171954,
+   "mass_kg": 0.08174480253483282,
+   "thrust_to_weight_nominal": 1.256678434076607,
+   "thrust_to_weight_empty": 1.1246275728145552,
+   "hover_time_min": 3.329600069222785,
+   "thrust_max_n": 0.2519377969123776,
+   "thrust_curve_a": 0.1975803181844008,
    "yaw_torque_coeff_m": 0.0076867402855528375,
-   "motor_tau_hover_s": 0.002190482275502419,
+   "motor_tau_hover_s": 0.002129799525318779,
    "failures": [
-    "T/W 1.22 < 1.3"
+    "T/W 1.26 < 1.3",
+    "motor current 3.6 A > motor max 3.5 A"
    ],
-   "hover_throttle": 0.7649879254864548,
-   "wot_motor_current_a": 2.9282169017392463,
-   "thrust_max_g": 21.595021751992025
+   "hover_throttle": 0.7915847498528327,
+   "wot_motor_current_a": 3.5590699471528806,
+   "thrust_max_g": 25.68173261084379
   }
  },
  "warnings": [
-  "pessimistic: T/W 1.22 < 1.3"
+  "pessimistic: T/W 1.26 < 1.3",
+  "pessimistic: motor current 3.6 A > motor max 3.5 A"
  ],
  "with_guard": {
-  "mass_g": 72.32,
+  "mass_g": 82.95,
   "cog_mm": [
-   0.51,
-   0.19,
-   14.7
+   1.24,
+   0.28,
+   14.55
   ],
-  "arm_crash_sf": 1.99,
+  "arm_crash_sf": 1.74,
   "tightest_gaps": [
+   [
+    1.0,
+    "board",
+    "camera"
+   ],
    [
     1.4,
     "board",
@@ -242,28 +265,25 @@
     1.65,
     "motor_2",
     "guard"
-   ],
-   [
-    1.65,
-    "motor_3",
-    "guard"
    ]
   ],
   "failures": [],
   "warnings": [
-   "pessimistic: T/W 1.14 < 1.3",
-   "pessimistic: hover throttle 0.83 > 0.8"
+   "pessimistic: T/W 1.18 < 1.3",
+   "pessimistic: hover throttle 0.84 > 0.8",
+   "pessimistic: hover time 3.0 min < 3.0",
+   "pessimistic: motor current 3.6 A > motor max 3.5 A"
   ],
   "propulsion": {
    "nominal": {
-    "thrust_to_weight_nominal": 1.6038194563032149,
-    "hover_throttle": 0.5981870869760725,
-    "hover_time_min": 7.292124547688299
+    "thrust_to_weight_nominal": 1.656121505583789,
+    "hover_throttle": 0.6310812227444822,
+    "hover_time_min": 5.516830641631508
    },
    "pessimistic": {
-    "thrust_to_weight_nominal": 1.1375964684866755,
-    "hover_throttle": 0.834288816613993,
-    "hover_time_min": 3.6328097471737224
+    "thrust_to_weight_nominal": 1.1794088163773568,
+    "hover_throttle": 0.8411240359692147,
+    "hover_time_min": 2.964401425387645
    }
   }
  }

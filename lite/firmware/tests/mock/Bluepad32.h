@@ -7,10 +7,14 @@ struct Controller {
   bool hasData() const;
   void disconnect();
   int32_t axisX() const;
+  int32_t axisY() const;
   int32_t axisRX() const;
   int32_t axisRY() const;
   int32_t throttle() const;
+  bool a() const;
   bool b() const;
+  bool x() const;
+  bool y() const;
   uint16_t miscButtons() const;
   void playDualRumble(uint16_t delayedStartMs, uint16_t durationMs, uint8_t weakMagnitude, uint8_t strongMagnitude);
 };
