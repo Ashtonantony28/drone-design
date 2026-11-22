@@ -97,3 +97,17 @@ requirements_pessimistic:
   min_thrust_to_weight: 1.3
   max_hover_throttle: 0.80
   min_hover_time_min: 3.0
+
+# Flight simulation (lite/fly.py, neuroflight-fc simulator). Values the CAD/propulsion
+# models don't give; mass, inertia, arm, thrust curve and yaw coefficient come from
+# lite/out/checks.json.
+sim:
+  # coreless 8520 + 65 mm prop. The DC-motor model gives ~2.5 ms (rotor inertia only),
+  # which is optimistic: measured micro brushed setups are tens of ms. Conservative:
+  motor_tau_up: 0.040      # s
+  motor_tau_down: 0.060    # s (no active braking on a low-side MOSFET drive)
+  idle_command: 0.0        # brushed drive: motors stop at zero
+  max_body_rate: [6.0, 6.0, 4.0]   # rad/s, angle-mode outer loop limits
+  lin_drag_scale_by_mass: true     # reference drag scaled by mass (similar shape, smaller)
+  angle_kp: [6.0, 6.0]     # 1/s, attitude error -> rate setpoint (ESP-Drone angle mode ~5.9)
+  sensing: imu_only        # filtered gyro + Mahony on the accelerometer; no flow/ToF/baro
