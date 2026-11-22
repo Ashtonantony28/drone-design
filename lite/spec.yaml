@@ -1,0 +1,99 @@
+# NF-3D Lite: sub-$50 brushed micro quad. Single source of truth for lite/.
+# Same schema as spec/vehicle.yaml so prop/propulsion.py runs on it unchanged.
+# SI units unless the key says mm/g. Bought-part masses are typical listings (VERIFY on a scale).
+name: NF-3D Lite
+description: ~100 mm brushed micro quad, 1S, ESP32 flight controller on a school-milled board, Xbox controller over Bluetooth
+
+geometry_mm:
+  arm_xy: 36.0            # |x| = |y| of each motor axis (X layout): 101.8 mm motor-to-motor diagonal
+  prop_diameter: 65.0     # 2-blade push-fit prop for 0.8 mm shafts
+  prop_band: 4.0          # axial thickness of the spinning prop (hub height)
+  prop_gap_above_motor: 1.0   # motor top -> prop hub bottom (shaft stub)
+  plate_thickness: 2.0    # centre plate
+  centre_x: 50.0          # centre plate (x forward), carries the board
+  centre_y: 42.0
+  arm_width: 6.0
+  arm_height: 4.5         # arms are tall rather than wide: bending stiffness against the motor thrust
+  arm_root_fillet: 4.0
+  motor_bore: 8.5         # 8520 motor body; print test piece and adjust for a firm press fit (PLA shrink)
+  motor_tube_wall: 1.5
+  motor_tube_z: [0.0, 22.0]   # tube extent; starts on the print bed so the frame prints flat with no supports
+  motor_z0: 10.0          # motor body bottom, resting on a 1 mm internal ledge; props end up above the electronics
+  board_holes: [19.0, 15.0]   # M2 holes at (+-19, +-15): must match lite/ecad board
+  board_hole: 1.8         # M2 self-tapping into PLA
+  board_boss_od: 5.0
+  board_boss_height: 11.5 # plate top -> board bottom: battery (8 mm + foam tape) plus the bottom-side SMD parts
+  board_underside_parts: 1.6  # tallest bottom-side part (SOD-123/SOT-23 ~1.35 mm) + flush-trimmed THT tails
+  board_size: [46.0, 38.0, 1.6]
+  avionics_height: 14.0   # board top -> top of the plugged-in ESP32 module (female headers + module)
+  strap_slot: [12.0, 2.5] # battery strap slots in the centre plate
+  min_clearance: 1.0
+  prop_tip_gap: 1.0       # used as the minimum prop-to-anything gap
+
+materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
+  pla_print:  {density: 1240, E: 3.0e+9, nu: 0.36, strength: 2.5e+7}   # 100 % infill, layer-line knockdown included
+
+parts:
+  motor:      {qty: 4, mass_g: 4.0,  envelope_mm: {diameter: 8.5, height: 20.0}, ref: "8520 coreless brushed, 3.7 V, 0.8 mm shaft"}
+  prop:       {qty: 4, mass_g: 0.6,  ref: "65 mm 2-blade push-fit"}
+  battery:    {qty: 1, mass_g: 16.0, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 25C, PH2.0 (800 mAh adds ~4 g and ~2 min)"}
+  board:      {qty: 1, mass_g: 8.0,  ref: "school-milled 2-layer FR4 46x38x1.6 with MOSFETs, LDO, passives, headers"}
+  esp32:      {qty: 1, mass_g: 6.0,  ref: "ESP32 D1 mini (classic ESP32-WROOM-32)"}
+  imu:        {qty: 1, mass_g: 2.0,  ref: "MPU-6050 GY-521 breakout"}
+  charger:    {qty: 1, mass_g: 2.0,  ref: "TP4056 module with protection"}
+  hardware:   {qty: 1, mass_g: 1.5,  ref: "4x M2 screws, battery strap"}
+  wiring:     {qty: 1, mass_g: 2.0,  ref: "motor leads, battery lead"}
+
+electrical:
+  cells: 1
+  cell_v_nominal: 3.7
+  cell_v_full: 4.2
+  cell_v_empty: 3.4       # ESP32 LDO dropout limit: land at 3.4 V under load
+  capacity_mah: 600
+  c_rating_continuous: 25
+  c_rating_burst: 40
+  pack_ir_ohm: 0.090      # 1S 600 mAh 25C, VERIFY
+  usable_fraction: 0.80
+  esc_continuous_a: 5.0   # AO3400A low-side switch, ~5 A with these copper areas
+  esc_efficiency: 0.95    # MOSFET + Schottky losses
+  avionics_w: 0.6         # ESP32 with Bluetooth active (~150 mA) + IMU + LED
+
+motor:   # 8520 coreless, typical listing figures (VERIFY: spin up on a bench supply and log current)
+  kv_rpm_per_v: 14000
+  rm_ohm: 0.50            # high-current 8520 variants list 0.4-0.6 ohm; gives ~35 g at 4.2 V, ~2.9 A
+  i0_a: 0.15
+  i0_ref_v: 3.7
+  rotor_inertia_kgm2: 3.0e-9
+  max_current_a: 3.5
+
+propeller:  # 65 mm toy 2-blade, static coefficients (n in rev/s, D in m)
+  ct: 0.095
+  cp: 0.050
+  duct_thrust_gain: 1.0
+  inertia_kgm2: 2.0e-9
+
+environment:
+  rho: 1.225
+  g: 9.81
+
+pessimistic:   # same corner definition as v1
+  ct_scale: 0.85
+  cp_scale: 1.20
+  mass_scale: 1.05
+
+requirements:
+  max_auw_g: 85.0
+  min_thrust_to_weight: 1.6     # a brushed micro flies at ~1.6-2.5; below 1.5 it can't climb out of a wobble
+  max_hover_throttle: 0.75
+  min_hover_time_min: 4.0
+  max_cog_offset_xy_mm: 2.0
+  max_esc_current_fraction: 0.85
+
+# The pessimistic corner (motors 15 % weaker, props 20 % hungrier, 5 % heavier) must
+# still hover with control margin; full performance is only required at nominal.
+# A brushed 8520 is motor-limited (bigger props don't help: 65 -> 75 mm adds 1 g of
+# thrust), so the real fix for a weak corner is measuring the motors you get.
+requirements_pessimistic:
+  min_thrust_to_weight: 1.3
+  max_hover_throttle: 0.80
+  min_hover_time_min: 3.0

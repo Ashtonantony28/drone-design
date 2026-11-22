@@ -100,7 +100,7 @@ top copper only where the bottom is closed.
 ## Hand-assembly order
 
 Work bottom first, low parts before tall ones. Trim every through-hole tail **flush** on the bottom: the
-battery sits about 1.5 mm under the board (`lite/spec.yaml`).
+battery sits 3 mm under the board, about 1.4 mm below the tallest bottom part (`lite/spec.yaml`).
 
 1. **Wire vias V1-V5.**
 2. **Bottom SMD, smallest first:**
