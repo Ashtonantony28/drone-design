@@ -10,9 +10,11 @@ Brushed 8520 motors vary from batch to batch. The design flies on the model's no
 4. Once the board is built, you can do the same test with the board's serial command `spin <motor> <duty>` (see below).
 
 ## 2. Print the frame
-- `frame.stl`: PLA, 0.2 mm layers, 3 walls, 30 % infill. Print it flat, as exported. It needs no supports.
-- The print is about 15 g. If it comes out over 18 g, reduce the infill.
-- The motor tubes are a press fit (8.5 mm bore). If they're loose, add one wrap of tape. If they're tight, ream with a drill bit.
+- `frame.stl`: **PETG** (v2), 0.2 mm layers, 3 walls, 100 % infill on the arms (30 % elsewhere is fine). Print it flat, as exported. It needs no supports. PETG is used because the motor cans get warm enough to soften PLA (PLA softens at about 55-60 °C, PETG at about 80 °C). PLA still works for a first test print.
+- The print is about 11.3 g. If it comes out over 14 g, reduce the infill in the centre plate.
+- **Motor clamps.** Each motor tube has a slit on its outboard side and a groove round it. Push the motor in until it sits on the ledge inside the tube, with its leads through the hole in the bottom, then pull a 2.5 mm zip tie tight in the groove. Print a test tube first if your printer runs tight or loose: `motor_bore` in `lite/spec.yaml` is the knob.
+- **Battery.** It slides in from the front and stops against the two posts at the back. A strap goes through the two slots in the plate.
+- **Optional prop guard** (`guard.stl`, 5.2 g, PETG, print flat): it drops over the tops of the four motor tubes. With it fitted the drone weighs about 72 g, hovers at about 60 % throttle and flies about 7.3 min (checked by `python -m lite.checks`). Fit it for your first indoor flights.
 
 ## 3. Make the board
 Follow `lite/ecad/MILLING.md`. In short:

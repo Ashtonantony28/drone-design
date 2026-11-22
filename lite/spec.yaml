@@ -9,16 +9,21 @@ geometry_mm:
   prop_diameter: 65.0     # 2-blade push-fit prop for 0.8 mm shafts
   prop_band: 4.0          # axial thickness of the spinning prop (hub height)
   prop_gap_above_motor: 1.0   # motor top -> prop hub bottom (shaft stub)
-  plate_thickness: 2.0    # centre plate
+  plate_thickness: 1.6    # centre plate (v2: 2.0 -> 1.6; the side rims and arm roots carry the bending)
+  plate_windows: [[0, 0, 16, 20], [19.5, 0, 7, 20], [-19.5, 0, 7, 20]]   # v2 lightening/wire windows [cx, cy, w, h]
   centre_x: 50.0          # centre plate (x forward), carries the board
   centre_y: 42.0
-  arm_width: 6.0
-  arm_height: 4.5         # arms are tall rather than wide: bending stiffness against the motor thrust
+  arm_root_width: 7.5     # v2: tapered arms, wide where the bending moment is largest
+  arm_tip_width: 5.0
+  arm_height: 4.0         # arms are tall rather than wide: bending stiffness against the motor thrust
   arm_root_fillet: 4.0
   motor_bore: 8.5         # 8520 motor body; print test piece and adjust for a firm press fit (PLA shrink)
-  motor_tube_wall: 1.5
-  motor_tube_z: [0.0, 22.0]   # tube extent; starts on the print bed so the frame prints flat with no supports
-  motor_z0: 10.0          # motor body bottom, resting on a 1 mm internal ledge; props end up above the electronics
+  motor_tube_wall: 1.5    # grip section around the motor
+  motor_pedestal_wall: 1.0    # v2: thin pedestal below the motor, with diamond vent windows
+  motor_grip_length: 10.0     # tube length that holds the motor (slotted, zip-tie groove)
+  motor_tube_z: [0.0, 22.5]   # tube extent; starts on the print bed so the frame prints flat with no supports
+  motor_z0: 12.5          # v2 (was 10): +2.5 mm so the props clear the ESP32 module by >4 mm
+  motor_slit_width: 1.0   # v2: clamp slit; a zip tie in the groove squeezes the tube onto the motor
   board_holes: [19.0, 15.0]   # M2 holes at (+-19, +-15): must match lite/ecad board
   board_hole: 1.8         # M2 self-tapping into PLA
   board_boss_od: 5.0
@@ -26,17 +31,33 @@ geometry_mm:
   board_underside_parts: 1.6  # tallest bottom-side part (SOD-123/SOT-23 ~1.35 mm) + flush-trimmed THT tails
   board_size: [46.0, 38.0, 1.6]
   avionics_height: 14.0   # board top -> top of the plugged-in ESP32 module (female headers + module)
+  esp32_module: {size: [31.0, 39.0], centre: [2.55, 4.3]}   # MiniKit outline in body FLU from lite/ecad (antenna towards +y)
+  esp32_header_height: 8.5   # female header body: board top -> module underside
+  imu_module: {x: [-5.1, 11.1], y: [-3.8, 17.1], height: 4.0}   # GY-521 on the board top, under the ESP32
+  charger_module: {x: [-8.8, 17.2], y: [-21.3, -3.8], height: 4.5}   # TP4056 module on the board top, under the ESP32
+  battery_stop: {x: [-25.0, -24.0], y_centres: [-9.0, 9.0], width: 3.0, height: 4.0}   # v2: rear stops
+  frame_material: petg_print
+  guard:                  # v2 optional clip-on prop guard (lite/frame.py guard()); checks run with and without
+    fit: false
+    height: 3.0
+    ring_radius: 35.0     # inner radius; the 65 mm prop tip circle is 32.5
+    ring_width: 1.2       # neighbouring rings overlap at the mid-lines and fuse into one piece
+    spoke_width: 1.6
+    spoke_angle_deg: 60
+    collar_wall: 1.2
+    collar_clearance: 0.1
   strap_slot: [12.0, 2.5] # battery strap slots in the centre plate
   min_clearance: 1.0
   prop_tip_gap: 1.0       # used as the minimum prop-to-anything gap
 
 materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
   pla_print:  {density: 1240, E: 3.0e+9, nu: 0.36, strength: 2.5e+7}   # 100 % infill, layer-line knockdown included
+  petg_print: {density: 1270, E: 2.0e+9, nu: 0.38, strength: 3.0e+7}   # v2 default: softens ~80 C vs PLA ~55-60 C (motor heat)
 
 parts:
   motor:      {qty: 4, mass_g: 4.0,  envelope_mm: {diameter: 8.5, height: 20.0}, ref: "8520 coreless brushed, 3.7 V, 0.8 mm shaft"}
   prop:       {qty: 4, mass_g: 0.6,  ref: "65 mm 2-blade push-fit"}
-  battery:    {qty: 1, mass_g: 16.0, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 25C, PH2.0 (800 mAh adds ~4 g and ~2 min)"}
+  battery:    {qty: 1, mass_g: 16.0, x_offset: 0.5, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 25C, PH2.0 (800 mAh adds ~4 g and ~2 min)"}
   board:      {qty: 1, mass_g: 8.0,  ref: "school-milled 2-layer FR4 46x38x1.6 with MOSFETs, LDO, passives, headers"}
   esp32:      {qty: 1, mass_g: 6.0,  ref: "ESP32 D1 mini (classic ESP32-WROOM-32)"}
   imu:        {qty: 1, mass_g: 2.0,  ref: "MPU-6050 GY-521 breakout"}

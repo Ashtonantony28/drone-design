@@ -1,4 +1,4 @@
-"""NF-3D Lite: one-piece PLA micro frame in build123d.
+"""NF-3D Lite: one-piece printed (PETG, v2) micro frame in build123d.
 
 Body frame FLU as in v1 (x forward, y left, z up); origin at the frame centre on
 the bottom face of the centre plate. Motors in neuroflight order:
@@ -18,7 +18,7 @@ import math
 import os
 
 import yaml
-from build123d import Align, Axis, Box, Cylinder, Kind, Pos, Rot, extrude, offset
+from build123d import Align, Axis, Box, Cone, Cylinder, Kind, Plane, Polygon, Pos, Rot, extrude, offset, revolve
 
 from mech.frame import Component  # same dataclass, so the v1 check helpers apply
 
@@ -51,44 +51,140 @@ def dims(spec):
     return d
 
 
+def _arm(x, y, w_root, w_tip, h):
+    """Tapered arm from the frame centre to a motor axis (a trapezoid prism)."""
+    L = math.hypot(x, y)
+    pts = [(0, -w_root / 2), (L, -w_tip / 2), (L, w_tip / 2), (0, w_root / 2)]
+    return Rot(0, 0, math.degrees(math.atan2(y, x))) * extrude(Polygon(*pts, align=None), amount=h)
+
+
+def _motor_mount(spec, x, y):
+    """v2 motor mount: (solid to add, solid to cut).
+
+    z 0 .. pedestal top: thin-walled pedestal with three diamond vent windows (60-degree
+    flanks, so they print without supports) that let air reach the motor's base;
+    a 60-degree internal cone up to a 1 mm ledge the motor sits on (lead hole through it);
+    then a grip section that is slit on the outboard side, with a V-groove for a zip tie
+    that clamps the tube onto the motor. Clamping, not a press fit, so heat creep in the
+    plastic cannot loosen the motor.
+    """
+    g, d = spec["geometry_mm"], dims(spec)
+    z_lo, z_hi = g["motor_tube_z"]
+    z0 = g["motor_z0"]
+    ro, ri = d["tube_ro"], d["tube_ri"]
+    rp = ro - g["motor_pedestal_wall"]          # pedestal bore
+    r_lead = ri - 1.0                            # lead hole through the ledge
+    ledge0 = z0 - 1.0
+    cone_h = (rp - r_lead) * math.tan(math.radians(60))
+    cone_z0 = ledge0 - cone_h
+    add = Pos(x, y, z_lo) * Cylinder(ro, z_hi - z_lo, align=C)
+    cut = Pos(x, y, z0) * Cylinder(ri, z_hi - z0 + 1, align=C)                       # motor bore
+    cut += Pos(x, y, ledge0 - 0.01) * Cylinder(r_lead, 1.02, align=C)                 # lead hole
+    cut += Pos(x, y, cone_z0) * Cone(rp, r_lead, cone_h, align=C)                    # cone under the ledge
+    cut += Pos(x, y, z_lo - 1) * Cylinder(rp, cone_z0 - z_lo + 1.01, align=C)          # pedestal bore
+    # angles: the arm leaves towards the centre; windows and slit point elsewhere
+    a_in = math.degrees(math.atan2(-y, -x))
+    win_h = min(7.0, cone_z0 - z_lo - 1.5)
+    win_w = win_h / math.tan(math.radians(60))
+    zc = z_lo + 1.0 + win_h / 2
+    # window prism: its sketch plane faces radially outward (normal +x), vertical diagonal on z
+    radial = Plane(origin=(0, 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))
+    window = extrude(radial * Polygon((0, -win_h / 2), (win_w / 2, 0), (0, win_h / 2), (-win_w / 2, 0), align=None),
+                     amount=ro + 1)
+    for k in (90, 180, 270):
+        cut += Pos(x, y, zc) * Rot(0, 0, a_in + k) * window
+    # clamp slit on the outboard side, from the top down to 2 mm above the ledge
+    sl = g["motor_slit_width"]
+    slit_z0 = z0 + 2.0
+    cut += Pos(x, y, slit_z0) * Rot(0, 0, a_in + 180) * Box(ro + 1, sl, z_hi - slit_z0 + 1,
+                                                            align=(Align.MIN, Align.CENTER, Align.MIN))
+    # zip-tie V-groove (50-degree flanks, 0.6 mm deep) half-way up the grip
+    zg = z0 + g["motor_grip_length"] / 2
+    groove = revolve(Plane.XZ * Polygon((ro - 0.6, 0), (ro + 1.0, -1.9), (ro + 1.0, 1.9), align=None), axis=Axis.Z)
+    cut += Pos(x, y, zg) * groove
+    return add, cut
+
+
 def frame(spec) -> "Part":
-    """The printed frame: centre plate, arms, motor tubes, legs, board bosses."""
+    """The printed frame (v2): centre plate, tapered arms, clamped motor mounts, bosses."""
     g, d = spec["geometry_mm"], dims(spec)
     t = d["t"]
-    z_lo, z_hi = g["motor_tube_z"]
+    h = g["arm_height"]
     # 2-D outline of the flat parts (plate + arms), filleted at the arm roots
-    flat = Box(g["centre_x"], g["centre_y"], g["arm_height"], align=C)
+    flat = Box(g["centre_x"], g["centre_y"], h, align=C)
     for (x, y) in motor_xy(spec):
-        L = math.hypot(x, y)
-        flat += Rot(0, 0, math.degrees(math.atan2(y, x))) * Box(L, g["arm_width"], g["arm_height"],
-                                                             align=(Align.MIN, Align.CENTER, Align.MIN))
+        flat += _arm(x, y, g["arm_root_width"], g["arm_tip_width"], h)
     outline = flat.faces().sort_by(Axis.Z)[0]
     r = g["arm_root_fillet"]
     outline = offset(offset(outline, r, kind=Kind.ARC), -r, kind=Kind.ARC)
-    body = extrude(outline, amount=g["arm_height"], dir=(0, 0, 1))
-    # thin the centre back to plate thickness (arms stay tall), leaving side rims
-    # open at the front and back so the 48 mm battery slides in lengthwise; the side rims stay
-    pocket = Box(g["centre_x"] + 2, g["centre_y"] - 6, g["arm_height"] - t, align=C)
+    body = extrude(outline, amount=h, dir=(0, 0, 1))
+    # thin the centre back to plate thickness (arms stay tall), leaving side rims;
+    # open front and back so the 48 mm battery slides in lengthwise
+    pocket = Box(g["centre_x"] + 2, g["centre_y"] - 6, h - t, align=C)
     body -= Pos(0, 0, t) * pocket
+    cuts = []
     for (x, y) in motor_xy(spec):
-        body += Pos(x, y, z_lo) * Cylinder(d["tube_ro"], z_hi - z_lo, align=C)
-    # motor bores: through the tube top down to a 1 mm ledge at motor_z0, a smaller
-    # hole below lets the motor be pushed out and the leads exit
-    for (x, y) in motor_xy(spec):
-        body -= Pos(x, y, g["motor_z0"]) * Cylinder(d["tube_ri"], z_hi - g["motor_z0"] + 1, align=C)
-        body -= Pos(x, y, z_lo - 1) * Cylinder(d["tube_ri"] - 1.0, g["motor_z0"] - z_lo + 2, align=C)
+        add, cut = _motor_mount(spec, x, y)
+        body += add
+        cuts.append(cut)
     # board bosses with M2 pilot holes
     hx, hy = g["board_holes"]
     for sx in (-1, 1):
         for sy in (-1, 1):
             body += Pos(sx * hx, sy * hy, t) * Cylinder(g["board_boss_od"] / 2, g["board_boss_height"], align=C)
-            body -= Pos(sx * hx, sy * hy, 0) * Cylinder(g["board_hole"] / 2, t + g["board_boss_height"], align=C)
-    # battery strap slots and a lightening/wire window
+            cuts.append(Pos(sx * hx, sy * hy, 0) * Cylinder(g["board_hole"] / 2, t + g["board_boss_height"], align=C))
+    # v2 rear battery stops (the battery slides in from the front)
+    bs = g["battery_stop"]
+    for yc in bs["y_centres"]:
+        body += Pos((bs["x"][0] + bs["x"][1]) / 2, yc, t) * Box(bs["x"][1] - bs["x"][0], bs["width"], bs["height"], align=C)
+    # battery strap slots and the lightening/wire window
     sw, sh = g["strap_slot"]
     for sx in (-1, 1):
-        body -= Pos(sx * 12.0, 0, 0) * Box(sh, sw, t, align=C)
-    body -= Box(14, 18, t, align=C)
+        cuts.append(Pos(sx * 12.0, 0, 0) * Box(sh, sw, t, align=C))
+    for cx, cy, w, hh in g["plate_windows"]:
+        cuts.append(Pos(cx, cy, 0) * Box(w, hh, t, align=C))
+    for c in cuts:
+        body -= c
     return body
+
+
+def guard(spec) -> "Part":
+    """Optional clip-on prop guard (v2): one flat printed piece.
+
+    Four 270-degree rings (outside each prop's tip circle, the inner quarter facing the
+    centre left out) whose ends meet their neighbours', each held by two spokes to a
+    collar that slips over the top of its motor tube above the zip-tie groove. It sits
+    below the props, so it fends off walls and furniture rather than shrouding the prop.
+    Prints flat, no supports.
+    """
+    g, d = spec["geometry_mm"], dims(spec)
+    G = g["guard"]
+    z_hi = g["motor_tube_z"][1]
+    zb = z_hi - G["height"]
+    ro_t = d["tube_ro"]
+    rc_i, rc_o = ro_t + G["collar_clearance"], ro_t + G["collar_clearance"] + G["collar_wall"]
+    r_in, r_out = G["ring_radius"], G["ring_radius"] + G["ring_width"]
+    part = None
+    for (x, y) in motor_xy(spec):
+        a_out = math.atan2(y, x)                                      # outboard direction
+        ring = Cylinder(r_out, G["height"], align=C) - Cylinder(r_in, G["height"], align=C)
+        # remove the inner quarter (a 90-degree wedge facing the frame centre)
+        a_in = a_out + math.pi
+        R = r_out + 2
+        wedge = extrude(Polygon((0, 0), (R * math.cos(a_in - math.pi / 4) * 1.5, R * math.sin(a_in - math.pi / 4) * 1.5),
+                                (R * math.cos(a_in) * 2.2, R * math.sin(a_in) * 2.2),
+                                (R * math.cos(a_in + math.pi / 4) * 1.5, R * math.sin(a_in + math.pi / 4) * 1.5), align=None),
+                        amount=G["height"])
+        ring -= wedge
+        piece = ring + (Cylinder(rc_o, G["height"], align=C) - Cylinder(rc_i, G["height"], align=C))
+        for k in (-1, 1):
+            a = a_out + k * math.radians(G["spoke_angle_deg"])
+            L = r_in - rc_o + 0.6
+            piece += Rot(0, 0, math.degrees(a)) * Pos(rc_o - 0.3, 0, 0) * Box(L, G["spoke_width"], G["height"],
+                                                                           align=(Align.MIN, Align.CENTER, Align.MIN))
+        piece = Pos(x, y, zb) * piece
+        part = piece if part is None else part + piece
+    return part
 
 
 # ---------------------------------------------------------------- bought parts (envelopes)
@@ -105,7 +201,7 @@ def prop_disk(spec, x, y):
 def build_assembly(spec=None) -> list[Component]:
     spec = spec or load_spec()
     g, d, P = spec["geometry_mm"], dims(spec), spec["parts"]
-    comps = [Component("frame", frame(spec), material="pla_print")]
+    comps = [Component("frame", frame(spec), material=g["frame_material"])]
     for i, (x, y) in enumerate(motor_xy(spec)):
         comps.append(Component(f"motor_{i}", motor(spec, x, y), mass_g=P["motor"]["mass_g"],
                                group="propulsion", touches={"frame"}))
@@ -117,16 +213,34 @@ def build_assembly(spec=None) -> list[Component]:
             board -= Pos(sx * hx, sy * hy, 0) * Cylinder(1.1, bt, align=C)
     # bottom-side SMD parts (lite/ecad/MILLING.md) as an envelope under the board, so the
     # battery clearance check sees them
-    ux, uy = 2 * (hx - g["board_boss_od"] / 2 - 0.5), by - 6  # stops short of the bosses
-    board += Pos(0, 0, -g["board_underside_parts"]) * Box(ux, uy, g["board_underside_parts"], align=C)
-    comps.append(Component("board", Pos(0, 0, d["board_z0"]) * board, mass_g=P["board"]["mass_g"] + P["charger"]["mass_g"],
+    # (v2: the whole underside except round the bosses; the real parts reach x +-19.6, y +-18.6)
+    under = Box(bx - 1.0, by - 1.0, g["board_underside_parts"], align=C)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            under -= Pos(sx * hx, sy * hy, 0) * Cylinder(g["board_boss_od"] / 2 + 0.5, g["board_underside_parts"], align=C)
+    board += Pos(0, 0, -g["board_underside_parts"]) * under
+    comps.append(Component("board", Pos(0, 0, d["board_z0"]) * board, mass_g=P["board"]["mass_g"],
                            group="avionics", touches={"frame"}))
-    # plugged-in modules: ESP32 D1 mini over the board, IMU breakout beside it (envelopes)
-    esp = Box(39.0, 31.0, g["avionics_height"], align=C)
-    comps.append(Component("esp32", Pos(0, 0, d["board_z1"]) * esp, mass_g=P["esp32"]["mass_g"] + P["imu"]["mass_g"],
-                           group="avionics", touches={"board"}))
+    # TP4056 module on the board top (overhangs the right edge), under the ESP32
+    cm = g["charger_module"]
+    chg = Box(cm["x"][1] - cm["x"][0], cm["y"][1] - cm["y"][0], cm["height"], align=C)
+    comps.append(Component("charger", Pos((cm["x"][0] + cm["x"][1]) / 2, (cm["y"][0] + cm["y"][1]) / 2, d["board_z1"]) * chg,
+                           mass_g=P["charger"]["mass_g"], group="avionics", touches={"board"}))
+    # ESP32 MiniKit on 8.5 mm female headers: the module occupies the top of the stack
+    # (real outline and position from lite/ecad); the GY-521 sits under it on the board
+    em = g["esp32_module"]
+    hdr = g["esp32_header_height"]
+    esp = Box(em["size"][0], em["size"][1], g["avionics_height"] - hdr, align=C)
+    comps.append(Component("esp32", Pos(em["centre"][0], em["centre"][1], d["board_z1"] + hdr) * esp,
+                           mass_g=P["esp32"]["mass_g"], group="avionics", touches={"board"}))
+    im = g["imu_module"]
+    imu = Box(im["x"][1] - im["x"][0], im["y"][1] - im["y"][0], im["height"], align=C)
+    comps.append(Component("imu", Pos((im["x"][0] + im["x"][1]) / 2, (im["y"][0] + im["y"][1]) / 2, d["board_z1"]) * imu,
+                           mass_g=P["imu"]["mass_g"], group="avionics", touches={"board", "charger"}))  # courtyards abut (board DRC owns that gap)
+    if g["guard"]["fit"]:
+        comps.append(Component("guard", guard(spec), material=g["frame_material"], touches={"frame"}))
     e = P["battery"]["envelope_mm"]
-    comps.append(Component("battery", Pos(0, 0, d["t"] + 0.5) * Box(e["x"], e["y"], e["z"], align=C),
+    comps.append(Component("battery", Pos(P["battery"].get("x_offset", 0.0), 0, d["t"] + 0.5) * Box(e["x"], e["y"], e["z"], align=C),
                            mass_g=P["battery"]["mass_g"], group="battery", touches={"frame"}))
     return comps
 

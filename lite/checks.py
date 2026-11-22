@@ -112,11 +112,11 @@ def run(spec=None, verbose=True):
     # arm strength (beam check: the frame is four cantilevers off a stiff centre plate).
     # 20 g landing on ONE leg; full thrust on one arm. The arm leaves the centre plate where
     # the 45-degree line meets the plate edge.
-    mat = spec["materials"]["pla_print"]
+    mat = spec["materials"][g["frame_material"]]
     r_tip = math.hypot(a, a)
     r_root = min(g["centre_x"], g["centre_y"]) / 2 * math.sqrt(2)
     lever = (r_tip - r_root) * 1e-3
-    b, h = g["arm_width"] * 1e-3, g["arm_height"] * 1e-3
+    b, h = g["arm_root_width"] * 1e-3, g["arm_height"] * 1e-3  # tapered arm: root section at the plate edge
     Z = b * h * h / 6
     f_crash = M * 9.81 * 20.0
     s_crash = f_crash * lever / Z
@@ -160,11 +160,22 @@ def run(spec=None, verbose=True):
 
 
 def main():
-    r = run()
+    spec = load_spec()
+    r = run(spec)
+    # the optional clip-on prop guard (spec geometry_mm.guard): same checks with it fitted
+    sg = copy.deepcopy(spec)
+    sg["geometry_mm"]["guard"]["fit"] = True
+    print("\n--- with prop guard ---")
+    rg = run(sg)
+    r["with_guard"] = {"mass_g": rg["mass_g"], "cog_mm": rg["cog_mm"], "arm_crash_sf": rg["arm"]["crash_sf"],
+                       "tightest_gaps": rg["tightest_gaps"], "failures": rg["failures"],
+                       "warnings": rg.get("warnings", []),
+                       "propulsion": {k: {kk: v[kk] for kk in ("thrust_to_weight_nominal", "hover_throttle", "hover_time_min")}
+                                      for k, v in rg["propulsion"].items()}}
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "checks.json"), "w") as f:
         json.dump(r, f, indent=1)
-    sys.exit(1 if r["failures"] else 0)
+    sys.exit(1 if r["failures"] or rg["failures"] else 0)
 
 
 if __name__ == "__main__":
