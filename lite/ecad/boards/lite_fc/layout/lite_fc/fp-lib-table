@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "workspace_lib_footprints") (type "KiCad") (uri "${KIPRJMOD}/../../../../lib/footprints") (options "") (descr ""))
+)

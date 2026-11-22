@@ -1,0 +1,17 @@
+(kicad_symbol_lib
+	(version 20251024)
+	(generator "lite_gen_lib")
+	(symbol "MountingHole"
+		(pin_names (offset 1.016))
+		(exclude_from_sim no) (in_bom yes) (on_board yes)
+		(property "Reference" "H" (at 0 3.81 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "MountingHole" (at 0 -3.81 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "MountingHole_0_1"
+			(rectangle (start -5.08 2.54) (end 5.08 -2.54) (stroke (width 0.254) (type default)) (fill (type background)))
+		)
+		(symbol "MountingHole_1_1"
+		)
+	)
+)

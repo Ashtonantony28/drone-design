@@ -1,0 +1,23 @@
+ref,qty,value,package,side,mpn,manufacturer,notes
+U1,1,ESP32 MiniKit (MH-ET LIVE D1 mini),module 39x31 mm on 2.54 mm headers,top,ESP32 MiniKit,MH-ET LIVE,classic ESP32-WROOM-32; plugs into J_U1L/J_U1R; solder male pins on the two INNER rows only
+U1-hdr,1,female header 1x7 + 1x6 (cut from 1x40),2.54 mm 8.5 mm tall,top,generic,generic,left inner rows 2-8 and right inner rows 3-8
+U2,1,GY-521 MPU-6050 breakout,1x8 2.54 mm header,top,GY-521,generic,header along the left edge; body over the board centre
+U3,1,TP4056 + DW01 charger module with protection,26x17.5 mm module,top,TP4056 03962A module,generic,B+ / B- / OUT- pads wired in with short wire legs; USB faces the nose (+x)
+U4,1,ME6211C33M5G 3.3 V 500 mA LDO,SOT-23-5,bottom,ME6211C33M5G-N,Microne,CE tied to VIN under the body
+Q1-Q4,4,AO3400A N-MOSFET 30 V 5.7 A,SOT-23,bottom,AO3400A,Alpha & Omega,low-side motor switch
+D1-D4,4,SS14 Schottky 1 A 40 V,SMA (or B5819W in SOD-123),bottom,SS14,MDD,flyback across each motor; SOD-123 B5819W is lower (1.1 mm) under the battery
+R1-R4,4,100R 1%,1206,bottom,1206W4F1000T5E,UniOhm,gate resistor
+R5-R8,4,10k 1%,1206,bottom,1206W4F1002T5E,UniOhm,gate pull-down
+R9,1,100k 1%,1206,bottom,1206W4F1003T5E,UniOhm,battery sense divider top
+R10,1,47k 1%,1206,bottom,1206W4F4702T5E,UniOhm,battery sense divider bottom (4.2 V -> 1.34 V)
+R11,1,330R 1%,1206,bottom,1206W4F3300T5E,UniOhm,LED resistor
+C1,1,470uF 6.3V electrolytic,radial D6.3 P2.5,top,470uF 6.3V D6.3 radial,generic,bulk on VBAT; mind the polarity (+ square pad)
+C2,1,10uF 10V X5R,1206,bottom,CL31A106KPHNNNE,Samsung,LDO input
+C3,1,10uF 10V X5R,1206,bottom,CL31A106KPHNNNE,Samsung,LDO output
+C4,1,100nF 50V X7R,1206,bottom,CL31B104KBCNNNC,Samsung,at the IMU supply pins
+D5,1,3 mm LED,THT 2.54 mm,top,3mm LED,generic,status LED on GPIO19
+J1,1,JST PH2.0 2-pin vertical header,THT 2.0 mm,top,B2B-PH-K-S,JST,battery; check the pack's polarity against the +/- silkscreen
+SW1,1,SS-12D00 SPDT slide switch,THT 3 pin,top,SS-12D00G3,generic,power switch (high side); see MILLING.md about its current rating
+JP1,0,solder jumper (protection bypass),pads only,bottom,-,-,open by default; bridge to bypass the TP4056 protection FETs
+M1-M4,0,motor wire pads,THT 2.5 mm pads,-,-,-,8520 coreless motor leads: red to +; M1 rear-right M2 front-right M3 rear-left M4 front-left
+H1-H4,0,M2 mounting holes,2.2 mm NPTH,-,-,-,frame bosses at (+-19 +-15) mm

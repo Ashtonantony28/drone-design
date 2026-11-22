@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+# review pictures and logs are rebuilt by layout/run.sh (the JSON dumps are kept so that
+# check_board.py runs without KiCad)
+layout/build/*.png
+layout/build/*.log
+boards/lite_fc/layout/lite_fc/*.kicad_prl
+boards/lite_fc/layout/lite_fc/layout.log
+boards/lite_fc/layout/lite_fc/*-backups/
+fab/*.kicad_pcb
+.pcb/

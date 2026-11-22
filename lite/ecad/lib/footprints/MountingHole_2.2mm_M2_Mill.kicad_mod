@@ -1,0 +1,13 @@
+(footprint "MountingHole_2.2mm_M2_Mill"
+	(version 20240108)
+	(generator "lite_gen_lib")
+	(layer "F.Cu")
+	(descr "M2 mounting hole, 2.2 mm NPTH, 3.5 mm head / 5 mm boss keep-out")
+	(property "Reference" "REF**" (at 0 -3.4 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+	(property "Value" "MountingHole_2.2mm_M2_Mill" (at 0 3.4 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+	(attr through_hole)
+	(pad "" np_thru_hole circle (at 0 0) (size 2.2 2.2) (drill 2.2) (layers "*.Cu" "*.Mask"))
+	(fp_circle (center 0 0) (end 1.75 0) (stroke (width 0.12) (type solid)) (fill no) (layer "F.SilkS"))
+	(fp_circle (center 0 0) (end 1.75 0) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd"))
+	(fp_circle (center 0 0) (end 2.6 0) (stroke (width 0.05) (type solid)) (fill no) (layer "B.CrtYd"))
+)
