@@ -23,6 +23,10 @@ Follow `lite/ecad/MILLING.md`. In short:
 
 Two of the mounting screws (H3 and H4) must be **low button-head M2** screws.
 
+**Two power-path changes before flying:**
+- **Bridge JP1.** The charger module's protection trips at about 3 A, but hover alone draws about 3.7 A. Bridging JP1 bypasses it, so use a battery pack that has its own protection circuit (most 1S packs do). The firmware refuses to arm below 3.3 V and warns below 3.5 V.
+- **Upgrade or bridge the slide switch.** The SS-12D00 is rated about 0.5 A. Either fit a higher-current switch on the same pads, or bridge COM to B and use the battery plug as the on/off switch.
+
 ## 4. First power-up (props OFF)
 1. Flash the firmware (`lite/firmware/README.md`) and open the serial monitor at 115200 baud.
 2. **IMU check.** With the drone flat, `acc` should read about `0 0 9.8`. Lift the nose: `pitch` should go **negative**. Roll it right side down: `roll` should go **positive**. If not, fix `kImuToBody` in `lite_fc.ino`.
