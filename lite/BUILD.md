@@ -62,7 +62,7 @@ This adds three small boards. The drone then holds its position by itself, and a
 | Seeed XIAO ESP32-S3 **Sense** (with the camera board) | reads both sensors, streams the camera over Wi-Fi, relays laptop commands | $14-16 |
 | 30 AWG silicone wire, 2 zip ties | | |
 
-This puts the build at roughly $60-75, above the original $50 target. With the kit fitted the drone weighs 77.9 g and flies about 6 min (the camera's Wi-Fi costs about 0.6 min). On pessimistic motors, leave the prop guard off: with both fitted the thrust-to-weight is only 1.18.
+This puts the build at roughly $60-75, above the original $50 target. With the kit fitted the drone weighs 77.8 g and flies about 6 min (the camera's Wi-Fi costs about 0.6 min). On pessimistic motors, leave the prop guard off: with both fitted the thrust-to-weight is only 1.18.
 
 **Mounting** (the v3 `frame.stl` has the mounts built in):
 - Flow and ToF boards go on the tail tab, **sensor side down**, over the two windows. The flow board goes on the window on the drone's right (-y), the ToF board on its left. Fix them with a dot of hot glue or double-sided foam at the corners. Keep glue off the lens and the ToF aperture.
@@ -94,3 +94,11 @@ IO25 and IO27 are free outer-row pins on the MiniKit. If your MiniKit's silkscre
 2. Press **A**: position hold. Release the trigger. The drone should hold its spot within about 10-15 cm. The right stick now moves it (up to 1 m/s) and the left stick y climbs or descends. **X** returns to angle mode (only with the trigger pulled, so it can't drop).
 3. If the flow or height sensor drops out, the drone switches to height-only hold or lands. If you lose the controller in a hold mode, it lands. **B kills the motors in every mode.**
 4. For vision: tape a printed tag (`python -m lite.ground.make_tags 0`) on a wall at about 1 m height. Start the ground station (`lite/ground/README.md`), hover in position hold facing the tag, press **Y** (AUTO), then press **G** in the station window.
+
+## Checking the 3D model
+
+`make lite-audit` checks the detailed model (`lite/detail.py`, 222 solid parts) on the exact CAD solids: every
+part against every other part for overlaps, that every part is held by something that touches the frame, the
+swept disc of each prop against everything else, that every part is one valid solid, and that no part is still
+a plain placeholder box. It writes `lite/out/audit.json` and fails on any overlap, floating part or prop
+clearance under 1 mm. The tightest prop clearance is 1.6 mm, from the front props to the camera stack.

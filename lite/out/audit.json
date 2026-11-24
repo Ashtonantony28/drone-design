@@ -1,0 +1,40 @@
+{
+ "parts": 222,
+ "clashes": [],
+ "allowed": [],
+ "invalid": [],
+ "boxes": [],
+ "floating": [],
+ "swing": [
+  {
+   "prop": 0,
+   "min_clearance_mm": 1.0,
+   "nearest": "003 Motor 0 bearing boss",
+   "min_clearance_off_motor_mm": 1.6,
+   "nearest_off_motor": "212 XIAO ESP32-S3 (main board)"
+  },
+  {
+   "prop": 1,
+   "min_clearance_mm": 1.0,
+   "nearest": "013 Motor 1 bearing boss",
+   "min_clearance_off_motor_mm": 1.6,
+   "nearest_off_motor": "215 Sense expansion board"
+  },
+  {
+   "prop": 2,
+   "min_clearance_mm": 1.0,
+   "nearest": "023 Motor 2 bearing boss",
+   "min_clearance_off_motor_mm": 8.499,
+   "nearest_off_motor": "163 Tact switch"
+  },
+  {
+   "prop": 3,
+   "min_clearance_mm": 1.0,
+   "nearest": "033 Motor 3 bearing boss",
+   "min_clearance_off_motor_mm": 7.27,
+   "nearest_off_motor": "157 ESP32-WROOM-32 shield can"
+  }
+ ],
+ "contacts": 287,
+ "result": "PASS"
+}

@@ -45,8 +45,10 @@ geometry_mm:
     spoke_width: 1.6
     spoke_angle_deg: 60
     collar_wall: 1.2
-    collar_clearance: 0.1
-  strap_slot: [12.0, 2.5] # battery strap slots in the centre plate
+    collar_clearance: 0.0 # v3 audit: snug clip on the tube (it touches; 0.1 left it floating)
+  strap_slot: [12.0, 2.5] # battery strap slots [length along x, width]: one each side of the battery, so a strap
+  strap_slot_y: 13.75     # over the battery top goes down its sides, through the plate and joins underneath (v3 audit:
+                          # the v2 slots sat under the battery, where no strap could reach them)
   # v3 autonomy mounts (lite/frame.py): flow + ToF on a tail tab looking down, camera board on a
   # nose arch that the battery slides through. fit: false gives the v2 frame back.
   autonomy:
@@ -56,7 +58,8 @@ geometry_mm:
     flow_module: {size: [19.0, 14.0, 3.5], centre: [-38.7, -7.5], window: 7.0}       # PMW3901 breakout, lens down
     tof_module: {size: [18.0, 13.0, 2.5], centre: [-38.7, 8.0], window: [6.0, 4.0]}  # VL53L1X breakout, sensor down
     arch: {x0: 39.0, thickness: 1.6, half_width: 15.5, height: 30.0,
-           opening_half_width: 13.0, opening_wall: 10.6, flank_deg: 50.0, tie_slot: [1.2, 4.0]}  # battery (25 x 8) passes under
+           opening_half_width: 13.0, opening_wall: 10.6, flank_deg: 50.0, tie_slot: [1.2, 4.0],
+           corner_r: 4.0, lens_hole_r: 3.3, lens_z: 26.3}  # lens above the tie and the opening  # battery (25 x 8) passes under
     camera: {size: [17.5, 21.0, 15.0], y_centre: 2.75, z0: 11.0}   # XIAO ESP32-S3 Sense [y, z, depth], camera face taped to the
                                                                   # arch's back, lens through the opening; offset to +y to clear the USB charging plug
   min_clearance: 1.0

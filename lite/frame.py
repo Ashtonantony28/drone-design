@@ -18,7 +18,7 @@ import math
 import os
 
 import yaml
-from build123d import Align, Axis, Box, Cone, Cylinder, Kind, Plane, Polygon, Pos, Rot, extrude, offset, revolve
+from build123d import Align, Axis, Box, Cone, Cylinder, Kind, Plane, Polygon, Pos, Rot, extrude, fillet, offset, revolve
 
 from mech.frame import Component  # same dataclass, so the v1 check helpers apply
 
@@ -118,6 +118,10 @@ def frame(spec) -> "Part":
     r = g["arm_root_fillet"]
     outline = offset(offset(outline, r, kind=Kind.ARC), -r, kind=Kind.ARC)
     body = extrude(outline, amount=h, dir=(0, 0, 1))
+    try:  # soften the top edges of the plate and arms (the bottom stays sharp: it is the print bed face)
+        body = fillet(body.edges().group_by(Axis.Z)[-1], 0.6)
+    except Exception:
+        pass
     # thin the centre back to plate thickness (arms stay tall), leaving side rims;
     # open front and back so the 48 mm battery slides in lengthwise
     pocket = Box(g["centre_x"] + 2, g["centre_y"] - 6, h - t, align=C)
@@ -139,8 +143,13 @@ def frame(spec) -> "Part":
         body += Pos((bs["x"][0] + bs["x"][1]) / 2, yc, t) * Box(bs["x"][1] - bs["x"][0], bs["width"], bs["height"], align=C)
     # battery strap slots and the lightening/wire window
     sw, sh = g["strap_slot"]
-    for sx in (-1, 1):
-        cuts.append(Pos(sx * 12.0, 0, 0) * Box(sh, sw, t, align=C))
+    for sy in (-1, 1):
+        slot = Box(sw, sh, t, align=C)
+        try:
+            slot = fillet(slot.edges().filter_by(Axis.Z), sh / 2 - 0.01)
+        except Exception:
+            pass
+        cuts.append(Pos(0.0, sy * g["strap_slot_y"], 0) * slot)
     for cx, cy, w, hh in g["plate_windows"]:
         cuts.append(Pos(cx, cy, 0) * Box(w, hh, t, align=C))
     au = g.get("autonomy", {})
@@ -160,7 +169,12 @@ def _autonomy_mounts(spec, body):
     cuts = []
     tab = au["tail_tab"]
     x0, x1 = tab["x"]
-    body += Pos((x0 + x1) / 2, 0, 0) * Box(x1 - x0, 2 * tab["half_width"], t, align=C)
+    tb = Pos((x0 + x1) / 2, 0, 0) * Box(x1 - x0, 2 * tab["half_width"], t, align=C)
+    try:  # round the free (rear) corners of the tab
+        tb = fillet(tb.edges().filter_by(Axis.Z).group_by(Axis.X)[0], 4.0)
+    except Exception:
+        pass
+    body += tb
     nt = au["nose_tab"]
     n0, n1 = nt["x"]
     for sy in (-1, 1):  # two side bars; the battery slides in between, under the arch
@@ -174,9 +188,17 @@ def _autonomy_mounts(spec, body):
     hw, H, ow, wall = a["half_width"], a["height"], a["opening_half_width"], a["opening_wall"]
     apex = wall + ow * math.tan(math.radians(a["flank_deg"]))
     outer = Polygon((-hw, 0), (hw, 0), (hw, H), (-hw, H), align=None)
+    outer = fillet(outer.vertices().group_by(Axis.Y)[-1], a.get("corner_r", 0.01))
     opening = Polygon((-ow, -0.1), (ow, -0.1), (ow, wall), (0, apex), (-ow, wall), align=None)
+    try:  # round the opening's shoulders and its apex (a pointed arch, not a cut polygon)
+        top = opening.vertices().group_by(Axis.Y)
+        opening = fillet(top[-1] + top[-2], 2.0)
+    except Exception:
+        pass
     pl = Plane(origin=(a["x0"], 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))
     arch = extrude(pl * (outer - opening), amount=a["thickness"])
+    if a.get("lens_hole_r"):  # the camera lens looks through this hole (v2 had the lens behind solid plate)
+        arch -= Pos(a["x0"] - 1, au["camera"]["y_centre"], a["lens_z"]) * Rot(0, 90, 0) * Cylinder(a["lens_hole_r"], a["thickness"] + 2, align=C)
     body += arch
     # zip-tie slots either side of the camera board, and two gussets behind the arch posts
     sw, sh = a["tie_slot"]
@@ -233,7 +255,7 @@ def guard(spec) -> "Part":
         # v3: the front rings stop short of the camera and the nose arch (which guards the front)
         a = au["arch"]
         kx0 = a["x0"] - au["camera"]["size"][2] - 2.0
-        kx1 = a["x0"] + a["thickness"] + 2.0
+        kx1 = a["x0"] + a["thickness"] + 4.0   # clears the camera zip-tie head
         kw = a["half_width"] + 2.0
         part -= Pos((kx0 + kx1) / 2, 0, 0) * Box(kx1 - kx0, 2 * kw, 200.0, align=(Align.CENTER, Align.CENTER, Align.CENTER))
     return part
@@ -294,13 +316,18 @@ def build_assembly(spec=None) -> list[Component]:
         for key, part, colour in (("flow_module", "flow", None), ("tof_module", "tof", None)):
             m = au[key]
             sx, sy, sz = m["size"]
-            comps.append(Component(part, Pos(m["centre"][0], m["centre"][1], d["t"]) * Box(sx, sy, sz, align=C),
-                                   mass_g=P[part]["mass_g"], group="autonomy", touches={"frame"}))
+            env = Pos(m["centre"][0], m["centre"][1], d["t"]) * Box(sx, sy, sz, align=C)
+            rim = au["tail_tab"]["rim"]   # the sensor and its lens hang down into the window
+            env += Pos(m["centre"][0], m["centre"][1], 0.2) * Box(sx - 2 * rim - 0.4, sy - 2 * rim - 0.4, d["t"] - 0.2 + 0.01, align=C)
+            comps.append(Component(part, env, mass_g=P[part]["mass_g"], group="autonomy", touches={"frame"}))
         cam = au["camera"]
         cy, cz, cdep = cam["size"]
         x1 = au["arch"]["x0"]
-        comps.append(Component("camera", Pos(x1 - cdep / 2, cam["y_centre"], cam["z0"]) * Box(cdep, cy, cz, align=C),
-                               mass_g=P["camera"]["mass_g"], group="autonomy", touches={"frame"}))
+        env = Pos(x1 - cdep / 2, cam["y_centre"], cam["z0"]) * Box(cdep, cy, cz, align=C)
+        a = au["arch"]
+        if a.get("lens_hole_r"):  # lens barrel through the arch's lens hole
+            env += Pos(x1 - 0.01, cam["y_centre"], a["lens_z"]) * Rot(0, 90, 0) * Cylinder(a["lens_hole_r"] - 0.3, a["thickness"] + 0.62, align=C)
+        comps.append(Component("camera", env, mass_g=P["camera"]["mass_g"], group="autonomy", touches={"frame"}))
     if g["guard"]["fit"]:
         comps.append(Component("guard", guard(spec), material=g["frame_material"], touches={"frame"}))
     e = P["battery"]["envelope_mm"]
