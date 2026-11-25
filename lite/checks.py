@@ -149,6 +149,16 @@ def run(spec=None, verbose=True):
             # caught by the bench test in BUILD.md before anything is assembled
             (fail if corner == "nominal" else res.setdefault("warnings", []).append)(f"{corner}: {f}")
 
+    # motor acceptance (BUILD.md step 1, review L6/L7): the static full-power thrust each motor must
+    # show on the scale for this build to meet min_thrust_to_weight. The pessimistic corner is a
+    # motor batch that this bench test rejects, so its warnings are what a skipped test would cost.
+    need = req["min_thrust_to_weight"] * res["mass_g"] / 4.0
+    pess_g = res["propulsion"]["pessimistic"]["thrust_max_g"]
+    res["acceptance"] = {"min_motor_thrust_g": round(need, 1),
+                         "nominal_motor_thrust_g": round(res["propulsion"]["nominal"]["thrust_max_g"], 1),
+                         "pessimistic_motor_thrust_g": round(pess_g, 1),
+                         "pessimistic_rejected": pess_g < need}
+
     if verbose:
         print(f"AUW {res['mass_g']} g (frame print {res['frame_print_g']} g)  CoG {res['cog_mm']} mm")
         print("tightest gaps:", res["tightest_gaps"])
@@ -158,6 +168,10 @@ def run(spec=None, verbose=True):
         for k, p in res["propulsion"].items():
             print(f"{k}: T/W {p['thrust_to_weight_nominal']:.2f}, max {p['thrust_max_g']:.0f} g/motor at "
                   f"{p['wot_motor_current_a']:.2f} A, hover {p['hover_throttle']*100:.0f} %, {p['hover_time_min']:.1f} min")
+        acc = res["acceptance"]
+        print(f"motor acceptance: >= {acc['min_motor_thrust_g']} g each on the scale (nominal "
+              f"{acc['nominal_motor_thrust_g']} g, pessimistic {acc['pessimistic_motor_thrust_g']} g"
+              f"{' -> rejected' if acc['pessimistic_rejected'] else ''})")
         for w in res.get("warnings", []):
             print("WARN", w)
         print("FAIL" if res["failures"] else "PASS", *res["failures"], sep="\n  ")
@@ -172,7 +186,16 @@ def main():
     sg["geometry_mm"]["guard"]["fit"] = True
     print("\n--- with prop guard ---")
     rg = run(sg)
-    r["with_guard"] = {"mass_g": rg["mass_g"], "cog_mm": rg["cog_mm"], "arm_crash_sf": rg["arm"]["crash_sf"],
+    # the base v2 build (no autonomy kit) for the motor acceptance table in BUILD.md
+    sb = copy.deepcopy(spec)
+    sb["geometry_mm"]["autonomy"]["fit"] = False
+    print("\n--- base build, no autonomy kit ---")
+    rb = run(sb)
+    r["base"] = {"mass_g": rb["mass_g"], "acceptance": rb["acceptance"], "failures": rb["failures"],
+                 "warnings": rb.get("warnings", []),
+                 "propulsion": {k: {kk: v[kk] for kk in ("thrust_to_weight_nominal", "hover_throttle", "hover_time_min")}
+                                for k, v in rb["propulsion"].items()}}
+    r["with_guard"] = {"mass_g": rg["mass_g"], "acceptance": rg["acceptance"], "cog_mm": rg["cog_mm"], "arm_crash_sf": rg["arm"]["crash_sf"],
                        "tightest_gaps": rg["tightest_gaps"], "failures": rg["failures"],
                        "warnings": rg.get("warnings", []),
                        "propulsion": {k: {kk: v[kk] for kk in ("thrust_to_weight_nominal", "hover_throttle", "hover_time_min")}
@@ -180,7 +203,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "checks.json"), "w") as f:
         json.dump(r, f, indent=1)
-    sys.exit(1 if r["failures"] or rg["failures"] else 0)
+    sys.exit(1 if r["failures"] or rg["failures"] or rb["failures"] else 0)
 
 
 if __name__ == "__main__":

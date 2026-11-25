@@ -63,6 +63,7 @@ State Arming::update(const ArmingInputs& in) {
   if (!in.gyro_cal_done) f |= GYRO_CAL;
   if (in.vbat < c_.vbat_empty) f |= BATTERY_EMPTY;
   if (in.vbat < c_.vbat_low) f |= BATTERY_LOW;
+  if (!in.imu_ok) f |= IMU_FAIL;
   flags_ = f;
 
   const bool arm_edge = s.arm && !arm_prev_;
@@ -73,7 +74,7 @@ State Arming::update(const ArmingInputs& in) {
       if (in.gyro_cal_done) state_ = State::DISARMED;
       break;
     case State::DISARMED: {
-      const uint32_t refuse = NO_CONTROLLER | THROTTLE_UP | NOT_LEVEL | GYRO_CAL | BATTERY_EMPTY;
+      const uint32_t refuse = NO_CONTROLLER | THROTTLE_UP | NOT_LEVEL | GYRO_CAL | BATTERY_EMPTY | IMU_FAIL;
       if (arm_edge && !s.kill && !(f & refuse)) {
         state_ = State::ARMED;
         last_disarm_ = 0;
@@ -126,6 +127,10 @@ void FlightCore::init() {
   ap_.init();
   ap_out_ = AutopilotOutput{};
   armed_prev_ = false;
+  imu_bad_ = vlow_ = vcut_ = batt_land_ = false;
+  thr_avg_ = 0.0f;
+  ceiling_ = 1.0f;
+  land_vz_ = 0.0f;
 }
 
 // neuroflight-fc ControlLoop::accel_ref: soft deadband on the KF acceleration estimate
@@ -177,7 +182,15 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
     prev_kf_vel_ = v;
   }
 
-  // 3. arming
+  // 3. failsafe inputs: IMU reads failing for imu_timeout_ms
+  if (!imu.valid) {
+    if (!imu_bad_) { imu_bad_ = true; imu_bad_since_ = now_ms; }
+  } else {
+    imu_bad_ = false;
+  }
+  const bool imu_failed = imu_bad_ && now_ms - imu_bad_since_ >= arming_cfg.imu_timeout_ms;
+
+  // 4. arming
   ArmingInputs ai;
   ai.gyro_cal_done = cal_.done();
   ai.tilt = tilt;
@@ -185,7 +198,23 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
   ai.sticks = sticks;
   ai.now_ms = now_ms;
   ai.hold_mode = was_armed && ap_.hold_mode();
+  ai.imu_ok = !imu_failed;
   State st = arming_.update(ai);
+  // in-flight failsafes: a dead IMU disarms; a flat pack lands, then cuts off
+  if (st == State::ARMED) {
+    if (imu_failed) arming_.force_disarm(IMU_FAIL);
+    const bool low = vbat < arming_cfg.vbat_land, cut = vbat < arming_cfg.vbat_cutoff;
+    if (low && !vlow_) vlow_since_ = now_ms;
+    if (cut && !vcut_) vcut_since_ = now_ms;
+    vlow_ = low;
+    vcut_ = cut;
+    if (cut && now_ms - vcut_since_ >= arming_cfg.vbat_cutoff_ms) arming_.force_disarm(BATTERY_CUTOFF);
+    if (low && !batt_land_ && now_ms - vlow_since_ >= arming_cfg.vbat_land_ms) {
+      batt_land_ = true;
+      ceiling_ = arming_cfg.land_ceiling_frac * thr_avg_;
+    }
+    st = arming_.state();
+  }
   if (st == State::ARMED && !armed_prev_) {
     // arming: x/y start from here, height continues from the ToF
     const Vec3 p = kf_.pos();
@@ -196,7 +225,7 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
     ap_.disarmed();
   }
   out.state = st;
-  out.flags = arming_.flags() | arming_.last_disarm();
+  out.flags = arming_.flags() | arming_.last_disarm() | (batt_land_ ? BATTERY_LAND : 0u);
   out.tilt = tilt;
   out.q = q;
   out.pos = kf_.pos();
@@ -220,6 +249,10 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
 
   if (st != State::ARMED) {
     armed_prev_ = false;
+    vlow_ = vcut_ = batt_land_ = false;
+    thr_avg_ = 0.0f;
+    ceiling_ = 1.0f;
+    land_vz_ = 0.0f;
     ap_.disarmed();
     ap_out_ = AutopilotOutput{};
     comp_.cmd_new = false;
@@ -230,17 +263,29 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
     return out;  // motors 0
   }
   armed_prev_ = true;
-  // 4. outer loop at kControlRateHz: Autopilot (hold modes) or angle mode from the sticks
+  // battery landing: hold modes land with the autopilot; in angle mode the trigger is capped
+  Sticks sk = sticks;
+  thr_avg_ += (sticks.throttle - thr_avg_) * dt_;  // ~1 s average of the trigger
+  if (batt_land_) {
+    // vertical speed from the accelerometer (world z, gravity removed), leaky
+    const float az = q.rotate(acc).z - nf::vehicle::kGravity;
+    land_vz_ += (az - land_vz_ / arming_cfg.land_vz_tau) * dt_;
+    ceiling_ = std::fmax(ceiling_ - arming_cfg.land_ceiling_rate * dt_, 0.0f);
+    const float cap = ceiling_ + arming_cfg.land_kv * (arming_cfg.land_vz - land_vz_);
+    sk.throttle = std::fmin(sk.throttle, nf::clampf(cap, 0.0f, 1.0f));
+    if (ap_.hold_mode()) ap_.request_land();
+  }
+  // 5. outer loop at kControlRateHz: Autopilot (hold modes) or angle mode from the sticks
   const bool outer = tick_ % static_cast<uint32_t>(outer_div_) == 0;
   if (outer) {
-    const Setpoint sp = map_sticks(sticks, sticks_cfg);
+    const Setpoint sp = map_sticks(sk, sticks_cfg);
     PilotInput pi;
     pi.link_ok = sticks.connected && sticks.age_ms <= arming_cfg.link_timeout_ms;
     pi.req_hold = btn_edge_[0];
     pi.req_angle = btn_edge_[1];
     pi.req_auto = btn_edge_[2];
     btn_edge_[0] = btn_edge_[1] = btn_edge_[2] = false;
-    pi.throttle = sticks.throttle;
+    pi.throttle = sk.throttle;
     pi.fwd = shape(sticks.pitch, sticks_cfg);   // stick forward = fly forward
     pi.left = -shape(sticks.roll, sticks_cfg);  // stick right = fly right
     pi.up = shape(sticks.climb, sticks_cfg);
@@ -280,14 +325,14 @@ CoreOutput FlightCore::step(const ImuSample& imu, const Sticks& sticks, float vb
   }
   out.mode = ap_.mode();
   ++tick_;
-  // 5. rate PID + mixer (same order as sim/ctbr.py RateController)
+  // 6. rate PID + mixer (same order as sim/ctbr.py RateController)
   const Vec3 tau = pid_.update(cmd_.rate_sp, rate);
   const nf::MixerResult m = mixer_.mix(cmd_.thrust_n, tau);
   pid_.integrate(m.any_saturated());
   for (int i = 0; i < 4; ++i) out.motor[i] = nf::clampf(m.cmd[i], 0.0f, 1.0f);
   out.saturated = m.any_saturated();
   // zero throttle stops the motors in angle mode (no idle spin on a brushed micro)
-  if (!ap_out_.use_law && sticks.throttle <= 0.0f)
+  if (!ap_out_.use_law && sk.throttle <= 0.0f)
     for (float& d : out.motor) d = 0.0f;
   return out;
 }

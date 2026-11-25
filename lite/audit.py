@@ -30,7 +30,8 @@ OUT = os.path.join(HERE, "out")
 
 CLASH_TOL = 1e-3     # mm^3
 TOUCH_TOL = 0.02     # mm
-SWING_MIN = 1.0      # mm, prop disc to anything else
+SWING_MIN = load_spec()["geometry_mm"]["prop_tip_gap"]   # mm, prop disc to anything not on its motor (v4: 3.0, review L10)
+SWING_OWN = 0.95     # mm, prop disc to its own motor's bearing boss (the designed 1.0 mm shaft stub gap)
 
 # (regex for part A, regex for part B, build reason). Matched in both orders.
 ALLOWED: list[tuple[str, str, str]] = []
@@ -122,7 +123,7 @@ def audit(with_guard=True, verbose=True):
                 other = (d, names[k])
         rep["swing"].append({"prop": i, "min_clearance_mm": round(worst[0], 3), "nearest": worst[1],
                              "min_clearance_off_motor_mm": round(other[0], 3), "nearest_off_motor": other[1]})
-    swing_fail = [s for s in rep["swing"] if s["min_clearance_mm"] < SWING_MIN]
+    swing_fail = [s for s in rep["swing"] if s["min_clearance_off_motor_mm"] < SWING_MIN or s["min_clearance_mm"] < SWING_OWN]
 
     ok = not (rep["clashes"] or rep["invalid"] or rep["floating"] or swing_fail)
     rep["result"] = "PASS" if ok else "FAIL"

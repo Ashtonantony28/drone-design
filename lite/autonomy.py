@@ -23,7 +23,8 @@ Tests (gated, thresholds declared before the run). Randomized vehicles whose mot
 them with margin (T/W < 1.15, which the pessimistic corner plus randomization produces) are
 counted and reported, not judged.
   A  neuroflight-fc eval scenarios with the fw3 estimator: hover_1m, tilt_60, throw, each
-     nominal + randomized + every randomization extreme; target (0, 0, 2) m, success = no
+     nominal + randomized + every randomization extreme; target (0, 0, 2) m (these judge the control
+     loops' recovery, so the ToF range limit is lifted to 4 m here; B-G fly the real envelope), success = no
      crash, mean position error < 0.10 m over the last 0.5 s, tilt < 10 deg. Gate on the
      nominal / randomized groups: >= 95 % (nominal corner, 5 s), >= 90 % (pessimistic corner,
      T/W 1.27, 8 s to recover); the single-parameter extremes are reported.
@@ -33,7 +34,8 @@ counted and reported, not judged.
   E  flow dropout at 2 s -> ALT_HOLD: no crash, height within 0.20 m for 5 s.
   F  range dropout at 2 s -> LAND: touchdown < 1.0 m/s, disarmed within 2 s of touchdown and 12 s overall
      (the blind-land timeout bound; the touchdown time depends on the accelerometer bias).
-  G  LAND command at 1.5 m: touchdown < 0.6 m/s, disarmed within 8 s and 2 s of touchdown.
+  B-G start at 1.0 m with the VL53L1X as the firmware runs it: short mode, 50 Hz, <= 1.3 m (review L9).
+  G  LAND command at 1.0 m: touchdown < 0.6 m/s, disarmed within 8 s and 2 s of touchdown.
 
     python -m lite.autonomy [--n 256]      -> lite/out/autonomy.json
 """
@@ -181,8 +183,10 @@ class Autopilot:
     # the last known height at half speed: h / 0.4 * 2 + 1 s.
     BLIND_FACTOR, BLIND_MARGIN_S = 2.0, 1.0
 
-    def __init__(self, env, veh, spec):
+    def __init__(self, env, veh, spec, tof=True):
         self.env, self.veh = env, veh
+        if tof:
+            _tof_model(env, spec)
         n = env.n
         self.dt = env.control_dt
         self.hover_n = veh["mass"] * veh["gravity"]      # firmware: nominal mass from vehicle_params
@@ -242,7 +246,7 @@ def _vehicles(spec, checks, ev):
 def suite_a(ev, veh, spec, n, n_ext, seed, horizon_s=5.0):
     ev.load_nominal = lambda: copy.deepcopy(veh)
     env, groups, _ = ev.build(n, n_ext, seed, True, ("hover_1m", "tilt_60", "throw"), "fw3")
-    ap = Autopilot(env, veh, spec)
+    ap = Autopilot(env, veh, spec, tof=False)   # A: neuroflight-fc's scenarios at 2 m, range limit not modelled
     ap.law.p_sp[:] = torch.tensor(ev.TARGET)              # hold the eval target
     res = ev.rollout(env, ap, horizon_s=horizon_s)
     out = ev.summarize(res, groups)
@@ -256,7 +260,30 @@ def suite_a(ev, veh, spec, n, n_ext, seed, horizon_s=5.0):
     return out
 
 
-def _hover_env(ev, veh, n, seed, randomized, pos=(0.0, 0.0, 1.5)):
+def _tof_model(env, spec):
+    """The VL53L1X as the firmware runs it (review L9): short mode, a fresh range every 20 ms
+    (every second 100 Hz flow frame) and nothing beyond tof_max_range_m. The KF's range update
+    runs with each flow frame, so the odd frames get an invalid range."""
+    ph = spec["sim"]["pos_hold"]
+    kf = env.kf
+    kf.tof_max = float(ph.get("tof_max_range_m", 4.0))
+    every = max(1, round(ph.get("flow_hz", 100) / ph.get("tof_hz", 100)))
+    kf._tof_tick = 0
+    correct = kf.correct
+
+    def tof_correct(*a, **k):
+        if env.kf.tick % env.kf.flow_div == 0:                # a flow frame is processed this tick
+            kf.max_range = kf.tof_max if kf._tof_tick % every == 0 else -1.0
+            kf._tof_tick += 1
+        return correct(*a, **k)
+    kf.correct = tof_correct
+
+
+# B-G fly inside the ToF envelope (1.0 m, below the 1.3 m short-mode range)
+H0 = 1.0
+
+
+def _hover_env(ev, veh, n, seed, randomized, pos=(0.0, 0.0, H0)):
     ev.load_nominal = lambda: copy.deepcopy(veh)
     env, groups, _ = ev.build(n, 1, seed, False, ("hover_1m",), "fw3")
     q = env.quad
@@ -290,7 +317,7 @@ def _ground(env, state):
         q.set_state(idx, pos=pos, vel=z, omega=z.clone(), quat=quat, motor=q.motor[idx])
 
 
-def run_scenario(ev, veh, spec, n, seed, secs, randomized, events, pos=(0.0, 0.0, 1.5)):
+def run_scenario(ev, veh, spec, n, seed, secs, randomized, events, pos=(0.0, 0.0, H0)):
     """Generic closed loop. events(k, t, env, ap) mutates sensors / commands."""
     env = _hover_env(ev, veh, n, seed, randomized, pos)
     env.quad.floor_z = -1e9
@@ -407,7 +434,7 @@ def suite_e(ev, veh, spec, n, seed):
 def suite_f(ev, veh, spec, n, seed):
     def ev_(k, t, env, ap):
         if k == int(2.0 / env.control_dt):
-            env.kf.max_range = 0.0                       # every range sample now invalid
+            env.kf.tof_max = 0.0                         # every range sample now invalid
     env, ap, st, crashed, disarm_t, log = run_scenario(ev, veh, spec, n, seed, 12.0, True, ev_)
     return {"unflyable": log["unflyable"], "touchdown_speed_max": float(st["td_speed"].nan_to_num(9.9).max()),
             "touchdown_speed_median": float(st["td_speed"].nan_to_num(9.9).median()),

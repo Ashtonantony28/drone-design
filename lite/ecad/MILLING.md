@@ -106,23 +106,29 @@ battery sits 3 mm under the board, about 1.4 mm below the tallest bottom part (`
 2. **Bottom SMD, smallest first:**
    - U4 (ME6211, SOT-23-5). Its CE pin is tied to VIN under the body, so check that bridge with a meter.
    - Q1-Q4 (AO3400A, SOT-23).
-   - D1-D4 (B5819W, SOD-123). The cathode band goes towards the motor + pad.
+   - D1-D4 (2 A Schottky, MBR230LSFT1G in SOD-123FL, v4; the 1 A B5819W ran near its limit at
+     mid-throttle). The cathode band goes towards the motor + pad. Check the part sits on the SOD-123
+     pads before reflowing; any 2 A, 30 V+ Schottky no taller than 1.1 mm will do.
    - R1-R11 and C2-C4 (1206).
-   - Leave JP1 open.
+   - Leave JP1 open for now.
 3. **Check for shorts:** VBAT-GND, 3V3-GND and BAT_P-BAT_N must all be open.
+   Then **bridge JP1** with a short 22 AWG wire link laid flat across its pads (v4: the TP4056 is not
+   fitted, so this link is the battery's negative path).
 4. **D5 LED** (cathode = square pad, towards -y) and **C1** (470 uF, + = square pad, towards the edge).
    Solder each on both sides of the board.
-5. **J1** (PH2.0) and **SW1**.
-6. **TP4056 module (U3):** solder short wire legs into B+, B- and OUT-, then solder the module flat on
-   them, USB towards the nose. Solder OUT- on the top of the board too. Hold the USB end down with foam
-   tape.
+5. **Battery pigtail in J1 (v4):** a BT2.0 pigtail, 22 AWG, about 40 mm. Red into the J1 + hole, black
+   into the - hole, soldered on both sides. Lay the connector aft along the board's rear-right corner,
+   2-3 mm above the board, and fix the wires with hot glue. No PH2.0 header.
+6. **SW1 link (v4):** no switch. Solder a 22 AWG link from the SW1 middle pad (COM) to the pad nearest the
+   ESP32 (throw B, VBAT), on the top. The U3 pads stay empty (no TP4056 module).
+   Then run a bead of solder along the top VBAT tracks T1 and T2 and the bottom GND track from JP1.
 7. **GY-521 header** (VCC at the -y end, board body towards +x).
 8. **Female headers** for the ESP32 MiniKit: a 1x7 on the left inner rows 2-8 and a 1x6 on the right
    inner rows 3-8. Solder male pins on the module's two inner rows only. The module then sits above
-   the GY-521 and the TP4056.
+   the GY-521.
 9. **Before the ESP32 goes in:**
-   - Battery on, switch on. Check VBAT at C1 and 3.3 V on the ESP32 3V3 pin (L8).
-   - With the switch off, VBAT must be 0 V.
+   - Plug in the battery. Check VBAT at C1 and 3.3 V on the ESP32 3V3 pin (L8).
+   - Unplug it: VBAT must fall to 0 V (C1 drains through the divider in a few seconds).
 10. **Motors:** red lead to the square + pad. Solder M1+, M3+ and M4+ on both sides; they carry the top
     VBAT track.
     - M1 rear-right
@@ -153,7 +159,12 @@ LEDC PWM.
 
 ## Power path notes
 
-- **Charger and switch:** battery (J1) -> TP4056 B+/B-. B+ is the same copper as the module's OUT+. It
+- **v4 assembly (design review L1/L4):** the board copper is unchanged, but U3 and SW1 are not fitted.
+  Battery + (J1) -> BAT_P -> SW1 COM -> wire link -> throw B = VBAT. Battery - (J1) -> BAT_N -> JP1 wire
+  link -> GND. The BT2.0 pigtail replaces the PH2.0 header (2 A). The pack is charged off the drone,
+  and the firmware handles low voltage in flight (lands below 3.3 V, cuts off below 3.0 V).
+  The original notes below describe the v3 parts, for anyone who still fits them.
+- **Charger and switch (v3):** battery (J1) -> TP4056 B+/B-. B+ is the same copper as the module's OUT+. It
   feeds SW1 COM, and SW1 throw B is VBAT, so the switch is on the high side. The module's OUT- (behind
   the DW01 protection FETs) is board GND.
 - **Protection trip:** the DW01/8205A protection on these modules trips at about 3 A (VERIFY). Four 8520
@@ -172,7 +183,7 @@ LEDC PWM.
 
 ## Mechanical notes
 
-- **TP4056 module:** occupies a band along the +y edge (y 3.8-21.3). It overhangs the drone-right edge by
+- **TP4056 module (v3 only, not fitted in v4):** occupies a band along the +y edge (y 3.8-21.3). It overhangs the drone-right edge by
   2.3 mm and must be no longer than 26.0 mm. Its x range (-8.8 to 17.2) leaves 0.05 mm to SW1 and to the
   3.5 mm head of the H3 screw. Use button-head (ISO 7380) M2 screws at H3 and H4; a 3.8 mm cheese head
   touches SW1 and the module.
@@ -190,8 +201,6 @@ LEDC PWM.
    the pin order of both inner columns (RIOT-OS / MH-ET LIVE drawing).
 2. GY-521 outline (20.3 x 15.6 mm), pin order VCC GND SCL SDA XDA XCL AD0 INT, AD0 pull-down on the
    breakout (address 0x68), and the dropout of the breakout's LDO.
-3. TP4056 module: length 26.0 mm or less, pad order OUT- / B- / B+ along the battery end, and that B+
-   is the same copper as OUT+. Also its protection trip current (about 3 A).
-4. JST PH2.0 polarity of your battery packs against the +/- marking.
-5. SS-12D00 lead pitch (2.54 mm assumed; some versions are 2.0 mm) and its current rating.
-6. Order codes of the generic parts in `bom.csv` (UniOhm / Samsung / CJ); any equivalent will do.
+3. BT2.0 polarity of your battery packs against the pigtail (red = +).
+4. That the 2 A Schottky sits on the SOD-123 pads and is no taller than 1.1 mm.
+5. Order codes of the generic parts in `bom.csv` (UniOhm / Samsung / CJ); any equivalent will do.

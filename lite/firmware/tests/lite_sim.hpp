@@ -21,6 +21,7 @@ struct Sim {
   Vec3 ext_torque{};
   Vec3 ext_force{};   // world frame (N): wind gusts
   bool ground = true;
+  Vec3 accel_bias{};  // body frame (m/s^2): an uncalibrated accelerometer
   float thrust(float wi) const {
     const float a = nf::vehicle::kThrustCurveA;
     return nf::vehicle::kThrustMax * (a * wi * wi + (1 - a) * wi);
@@ -64,7 +65,7 @@ struct Sim {
   ImuSample imu() const {
     ImuSample s;
     s.gyro = omega + Vec3{0.01f, -0.008f, 0.005f};  // constant bias: the calibrator must remove it
-    s.accel = q.rotate_inv(acc_w + Vec3{0, 0, nf::vehicle::kGravity});
+    s.accel = q.rotate_inv(acc_w + Vec3{0, 0, nf::vehicle::kGravity}) + accel_bias;
     return s;
   }
 };
@@ -77,6 +78,7 @@ struct Rig {
   CoreOutput out;
   // v3 companion sensors (off = the v2 board: no flow / ToF)
   bool sensors = false;
+  bool imu_ok = true;   // false: every IMU read fails (the sketch repeats the last sample, marked stale)
   bool flow_ok = true, range_ok = true;   // false = that sensor stops (unplugged / out of range)
   float flow_noise = 0.0f, range_noise = 0.0f;
   uint32_t rng = 12345u;
@@ -147,7 +149,9 @@ struct Rig {
         if (ms % 10 == 0) sense();   // 100 Hz flow / ToF frames
         aux.comp.cmd_age_s = cmd_age;
       }
-      out = fc.step(sim.imu(), st, vbat, ms, sensors ? &aux : nullptr);
+      ImuSample im = sim.imu();
+      im.valid = imu_ok;
+      out = fc.step(im, st, vbat, ms, sensors ? &aux : nullptr);
       aux.sample_new = false;
       aux.comp.cmd_new = false;   // FlightCore latches it for the next outer-loop step
       cmd_age += 0.001f;

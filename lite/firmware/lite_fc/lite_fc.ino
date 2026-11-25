@@ -15,7 +15,9 @@
 // Failsafe: angle mode: controller silent for 250 ms, tilted past 75 deg for 0.3 s, or zero throttle
 // for 5 s -> motors off. Hold modes: controller silent -> LAND; flow lost -> ALT_HOLD; height lost
 // -> LAND; laptop silent in AUTO -> hover, then POS_HOLD. Battery below 3.5 V: controller rumbles,
-// LED double-blinks; below 3.3 V: won't arm.
+// LED double-blinks; below 3.3 V: won't arm. In flight, under 3.3 V for 2 s: lands (hold modes land
+// themselves; in angle mode the trigger is capped so it sinks); under 3.0 V for 1 s: motors off.
+// IMU reads failing for 20 ms: motors off.
 //
 // Companion (XIAO ESP32-S3 Sense, v3): UART2 at 115200, frames of lite/autonomy.hpp (link::).
 // It sends SENS (PMW3901 flow + VL53L1X range, 100 Hz) and relays CMD from the laptop; this
@@ -25,6 +27,7 @@
 #include <Arduino.h>
 #include <Bluepad32.h>
 #include <Wire.h>
+#include <esp_system.h>
 
 #include <lite_fc.h>  // library discovery (see lite_fc.h)
 #include "lite/autonomy.hpp"
@@ -184,7 +187,8 @@ static void control_task(void*) {
     lite::ImuSample imu;
     if (!mpu_read(imu)) {
       ++g_imu_errors;
-      imu = g_imu;                       // hold the last sample for one tick
+      imu = g_imu;                       // repeat the last sample, marked stale: the core
+      imu.valid = false;                 // disarms after ArmingConfig::imu_timeout_ms of these
     }
     const uint32_t now = millis();
     if ((n++ & 63) == 0) {               // battery at ~16 Hz, filtered
@@ -311,6 +315,8 @@ static void send_telemetry(const lite::CoreOutput& o, float vbat) {
 
 void setup() {
   Serial.begin(115200);
+  // a brown-out here means the 3.3 V rail dipped under motor load (pack sag): see BUILD.md, brown-out check
+  if (esp_reset_reason() == ESP_RST_BROWNOUT) Serial.println("WARNING: last reset was a BROWN-OUT (supply dipped)");
   Serial2.begin(kCompBaud, SERIAL_8N1, kCompRxPin, kCompTxPin);
   pinMode(kLedPin, OUTPUT);
   motors_init();
@@ -355,7 +361,8 @@ void loop() {
     last_refuse = now;
   }
   static uint32_t last_rumble = 0;
-  if (g_ctl && (o.flags & lite::BATTERY_LOW) && now - last_rumble > 10000) {
+  const uint32_t rumble_every = (o.flags & lite::BATTERY_LAND) ? 2000 : 10000;  // landing: every 2 s
+  if (g_ctl && (o.flags & (lite::BATTERY_LOW | lite::BATTERY_LAND)) && now - last_rumble > rumble_every) {
     g_ctl->playDualRumble(0, 400, 0x80, 0x40);
     last_rumble = now;
   }

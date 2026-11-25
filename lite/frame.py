@@ -219,9 +219,11 @@ def guard(spec) -> "Part":
 
     Four 270-degree rings (outside each prop's tip circle, the inner quarter facing the
     centre left out) whose ends meet their neighbours', each held by two spokes to a
-    collar that slips over the top of its motor tube above the zip-tie groove. It sits
-    below the props, so it fends off walls and furniture rather than shrouding the prop.
-    Prints flat, no supports.
+    collar that slips over the top of its motor tube above the zip-tie groove. v4 (review
+    L8): the rings stand on a post at each spoke's outer end, so they span the prop's own
+    height band (ring_z_margin below the hub bottom to the top of the band) and shroud the
+    tips instead of sitting 11 mm under them. Print it upside down (ring tops on the bed)
+    with supports under the spokes and collars.
     """
     g, d = spec["geometry_mm"], dims(spec)
     G = g["guard"]
@@ -230,17 +232,19 @@ def guard(spec) -> "Part":
     ro_t = d["tube_ro"]
     rc_i, rc_o = ro_t + G["collar_clearance"], ro_t + G["collar_clearance"] + G["collar_wall"]
     r_in, r_out = G["ring_radius"], G["ring_radius"] + G["ring_width"]
+    zr0 = d["prop_z0"] - G.get("ring_z_margin", 0.5)                 # ring at the prop band
+    hr = d["prop_z1"] - zr0
     part = None
     for (x, y) in motor_xy(spec):
         a_out = math.atan2(y, x)                                      # outboard direction
-        ring = Cylinder(r_out, G["height"], align=C) - Cylinder(r_in, G["height"], align=C)
+        ring = Pos(0, 0, zr0 - zb) * (Cylinder(r_out, hr, align=C) - Cylinder(r_in, hr, align=C))
         # remove the inner quarter (a 90-degree wedge facing the frame centre)
         a_in = a_out + math.pi
         R = r_out + 2
-        wedge = extrude(Polygon((0, 0), (R * math.cos(a_in - math.pi / 4) * 1.5, R * math.sin(a_in - math.pi / 4) * 1.5),
+        wedge = Pos(0, 0, zr0 - zb - 1.0) * extrude(Polygon((0, 0), (R * math.cos(a_in - math.pi / 4) * 1.5, R * math.sin(a_in - math.pi / 4) * 1.5),
                                 (R * math.cos(a_in) * 2.2, R * math.sin(a_in) * 2.2),
                                 (R * math.cos(a_in + math.pi / 4) * 1.5, R * math.sin(a_in + math.pi / 4) * 1.5), align=None),
-                        amount=G["height"])
+                        amount=hr + 2.0)
         ring -= wedge
         piece = ring + (Cylinder(rc_o, G["height"], align=C) - Cylinder(rc_i, G["height"], align=C))
         for k in (-1, 1):
@@ -248,8 +252,16 @@ def guard(spec) -> "Part":
             L = r_in - rc_o + 0.6
             piece += Rot(0, 0, math.degrees(a)) * Pos(rc_o - 0.3, 0, 0) * Box(L, G["spoke_width"], G["height"],
                                                                            align=(Align.MIN, Align.CENTER, Align.MIN))
+            # post from the spoke's outer end up into the raised ring
+            piece += Rot(0, 0, math.degrees(a)) * Pos((r_in + r_out) / 2, 0, 0) * Box(
+                G["ring_width"] + 0.4, G["spoke_width"], zr0 - zb + 0.5, align=C)
         piece = Pos(x, y, zb) * piece
         part = piece if part is None else part + piece
+    # neighbouring rings cross at the mid-lines; trim each one's overshoot out of the next
+    # prop's keep-out (tip circle + prop_tip_gap) now that the rings are at prop height
+    keep = d["prop_r"] + g["prop_tip_gap"] + 0.05
+    for (x, y) in motor_xy(spec):
+        part -= Pos(x, y, zr0 - 1.0) * Cylinder(keep, hr + 2.0, align=C)
     au = spec["geometry_mm"].get("autonomy", {})
     if au.get("fit"):
         # v3: the front rings stop short of the camera and the nose arch (which guards the front)
@@ -296,10 +308,20 @@ def build_assembly(spec=None) -> list[Component]:
     comps.append(Component("board", Pos(0, 0, d["board_z0"]) * board, mass_g=P["board"]["mass_g"],
                            group="avionics", touches={"frame"}))
     # TP4056 module on the board top (overhangs the right edge), under the ESP32
+    # (v4 review: not fitted by default; the pack is charged off the drone)
     cm = g["charger_module"]
-    chg = Box(cm["x"][1] - cm["x"][0], cm["y"][1] - cm["y"][0], cm["height"], align=C)
-    comps.append(Component("charger", Pos((cm["x"][0] + cm["x"][1]) / 2, (cm["y"][0] + cm["y"][1]) / 2, d["board_z1"]) * chg,
-                           mass_g=P["charger"]["mass_g"], group="avionics", touches={"board"}))
+    if cm.get("fit", True):
+        chg = Box(cm["x"][1] - cm["x"][0], cm["y"][1] - cm["y"][0], cm["height"], align=C)
+        comps.append(Component("charger", Pos((cm["x"][0] + cm["x"][1]) / 2, (cm["y"][0] + cm["y"][1]) / 2, d["board_z1"]) * chg,
+                               mass_g=P["charger"]["mass_g"], group="avionics", touches={"board"}))
+    # v4: BT2.0 connector pair on the J1 pigtail, lying aft along the board's rear-right corner
+    bc = g.get("battery_connector")
+    if bc:
+        L = bc["x"][1] - bc["x"][0]
+        con = Box(L, bc["width"], bc["height"] + 0.7, align=(Align.CENTER, Align.CENTER, Align.MIN))   # + latch ridge, tin
+        comps.append(Component("battery_connector",
+                               Pos((bc["x"][0] + bc["x"][1]) / 2, bc["y_centre"], d["board_z1"] + bc["z_above_board"]) * con,
+                               mass_g=0.0, group="avionics", touches={"board"}))
     # ESP32 MiniKit on 8.5 mm female headers: the module occupies the top of the stack
     # (real outline and position from lite/ecad); the GY-521 sits under it on the board
     em = g["esp32_module"]

@@ -87,6 +87,9 @@ enum Flag : uint32_t {
   KILLED = 1u << 8,          // disarmed by the kill button
   IDLE_TIMEOUT = 1u << 9,    // disarmed: armed at zero throttle for idle_disarm_ms
   LANDED = 1u << 10,         // disarmed: the LAND mode's landing detector fired
+  IMU_FAIL = 1u << 11,       // IMU reads failing for imu_timeout_ms: won't arm; disarms in flight
+  BATTERY_LAND = 1u << 12,   // in flight, under vbat_land for vbat_land_ms: lands (latched until disarm)
+  BATTERY_CUTOFF = 1u << 13, // disarmed: under vbat_cutoff for vbat_cutoff_ms (protects the pack)
 };
 
 struct ArmingConfig {
@@ -98,6 +101,22 @@ struct ArmingConfig {
   uint32_t idle_disarm_ms = 5000;
   float vbat_empty = 3.30f;        // refuse to arm below this (V, resting)
   float vbat_low = 3.50f;          // warn below this
+  // In flight (V under load). The pack has no protection board of its own once JP1 is bridged,
+  // so the firmware is the over-discharge protection.
+  float vbat_land = 3.30f;         // below this for vbat_land_ms: land
+  uint32_t vbat_land_ms = 2000;
+  float vbat_cutoff = 3.00f;       // below this for vbat_cutoff_ms: motors off
+  uint32_t vbat_cutoff_ms = 1000;
+  // Landing without a height sensor (angle mode): the trigger is capped at a descent-rate hold,
+  // cap = base + land_kv * (land_vz - vz), where vz is the accelerometer's vertical speed (leaky,
+  // land_vz_tau, so accel bias costs at most bias * tau) and base starts at land_ceiling_frac of
+  // the recent average trigger and falls by land_ceiling_rate per s (so it lands even with bias).
+  float land_ceiling_frac = 0.98f;
+  float land_ceiling_rate = 0.03f;
+  float land_vz = -0.5f;      // m/s
+  float land_kv = 0.3f;      // trigger per m/s
+  float land_vz_tau = 4.0f;   // s
+  uint32_t imu_timeout_ms = 20;    // IMU reads failing this long: disarm (the attitude is unknown)
 };
 
 struct ArmingInputs {
@@ -108,6 +127,7 @@ struct ArmingInputs {
   uint32_t now_ms = 0;
   bool hold_mode = false;  // an autopilot mode flies the drone: link loss lands (Autopilot),
                            // and zero trigger is not idle
+  bool imu_ok = true;      // false: the IMU has failed (refuses arming)
 };
 
 class Arming {
@@ -132,6 +152,7 @@ class Arming {
 struct ImuSample {
   nf::Vec3 gyro{};   // rad/s, body FLU (already rotated from the sensor frame)
   nf::Vec3 accel{};  // m/s^2 specific force, body FLU (level at rest: [0, 0, +g])
+  bool valid = true; // false: this read failed and the sample is the last good one repeated
 };
 
 // v3 sensors and commands from the companion board (all optional).
@@ -198,6 +219,10 @@ class FlightCore {
   CompanionInput comp_{};  // latched between outer-loop steps (a CMD frame is never dropped)
   uint32_t tick_ = 0;
   bool attitude_seeded_ = false;
+  // failsafes: IMU reads failing, battery under the land / cut-off voltage (ArmingConfig)
+  bool imu_bad_ = false, vlow_ = false, vcut_ = false, batt_land_ = false;
+  uint32_t imu_bad_since_ = 0, vlow_since_ = 0, vcut_since_ = 0;
+  float thr_avg_ = 0.0f, ceiling_ = 1.0f, land_vz_ = 0.0f;
   float dt_ = 1.0f / nf::vehicle::kRateLoopHz;
   int outer_div_ = nf::vehicle::kRateLoopHz / nf::vehicle::kControlRateHz;
 };

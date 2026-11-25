@@ -476,6 +476,23 @@ TEST(closed_loop_link_loss_in_hold_lands) {
   CHECK(r.out.state == State::DISARMED && (r.out.flags & LANDED));
 }
 
+TEST(closed_loop_low_battery_in_hold_lands) {
+  Rig r;
+  takeoff_and_hold(r);
+  r.run(1.0f);
+  r.run(2.1f, 3.2f);  // under vbat_land for 2 s
+  CHECK(r.out.mode == Mode::LAND && (r.out.flags & BATTERY_LAND));
+  float td = -1;
+  for (int k = 0; k < 1500 && r.out.state == State::ARMED; ++k) {
+    const float vz = r.sim.v.z;
+    r.run(0.01f, 3.2f);
+    if (td < 0 && r.sim.p.z <= 0.0f) td = -vz;
+  }
+  std::printf("  low battery in POS_HOLD: touchdown %.2f m/s, disarmed %d\n", td, r.out.state == State::DISARMED);
+  CHECK(td >= 0.0f && td < 0.6f);
+  CHECK(r.out.state == State::DISARMED && (r.out.flags & LANDED));
+}
+
 TEST(closed_loop_auto_follow_goto_land) {
   Rig r;
   takeoff_and_hold(r);

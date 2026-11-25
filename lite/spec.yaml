@@ -21,8 +21,9 @@ geometry_mm:
   motor_tube_wall: 1.5    # grip section around the motor
   motor_pedestal_wall: 1.0    # v2: thin pedestal below the motor, with diamond vent windows
   motor_grip_length: 10.0     # tube length that holds the motor (slotted, zip-tie groove)
-  motor_tube_z: [0.0, 22.5]   # tube extent; starts on the print bed so the frame prints flat with no supports
-  motor_z0: 12.5          # v2 (was 10): +2.5 mm so the props clear the ESP32 module by >4 mm
+  motor_tube_z: [0.0, 24.2]   # tube extent; starts on the print bed so the frame prints flat with no supports (v4: +1.7 with the motor)
+  motor_z0: 14.2          # v2 (was 10): +2.5 mm so the props clear the ESP32 module by >4 mm; v4 (review L10): +1.7 mm
+                          # so the front props clear the camera stack by >= 3 mm (was 1.6)
   motor_slit_width: 1.0   # v2: clamp slit; a zip tie in the groove squeezes the tube onto the motor
   board_holes: [19.0, 15.0]   # M2 holes at (+-19, +-15): must match lite/ecad board
   board_hole: 1.8         # M2 self-tapping into PLA
@@ -34,18 +35,22 @@ geometry_mm:
   esp32_module: {size: [31.0, 39.0], centre: [2.55, 4.3]}   # MiniKit outline in body FLU from lite/ecad (antenna towards +y)
   esp32_header_height: 8.5   # female header body: board top -> module underside
   imu_module: {x: [-5.1, 11.1], y: [-3.8, 17.1], height: 4.0}   # GY-521 on the board top, under the ESP32
-  charger_module: {x: [-8.8, 17.2], y: [-21.3, -3.8], height: 4.5}   # TP4056 module on the board top, under the ESP32
+  charger_module: {fit: false, x: [-8.8, 17.2], y: [-21.3, -3.8], height: 4.5}   # TP4056 module (v4 review: not fitted;
+                          # the pack is charged off the drone, so the charger's 3 A protection and 1 A charge rate are gone)
+  battery_connector: {x: [-30.5, -16.0], y_centre: -13.4, width: 6.0, height: 4.0, z_above_board: 2.3}   # v4: BT2.0 pair
+                          # on a pigtail soldered into the J1 holes, lying along the board's rear-right corner, pointing aft
   battery_stop: {x: [-27.0, -26.0], y_centres: [-9.0, 9.0], width: 3.0, height: 4.0}   # rear stops (v3: 2 mm further back, CoG)
   frame_material: petg_print
   guard:                  # v2 optional clip-on prop guard (lite/frame.py guard()); checks run with and without
     fit: false
     height: 3.0
-    ring_radius: 35.0     # inner radius; the 65 mm prop tip circle is 32.5
+    ring_radius: 36.0     # inner radius; the 65 mm prop tip circle is 32.5 (v4: 35 -> 36 for the 3 mm prop gap)
     ring_width: 1.2       # neighbouring rings overlap at the mid-lines and fuse into one piece
     spoke_width: 1.6
     spoke_angle_deg: 60
     collar_wall: 1.2
     collar_clearance: 0.0 # v3 audit: snug clip on the tube (it touches; 0.1 left it floating)
+    ring_z_margin: 0.5    # v4 (review L8): the ring spans 0.5 mm below the prop hub bottom to the top of the prop band
   strap_slot: [12.0, 2.5] # battery strap slots [length along x, width]: one each side of the battery, so a strap
   strap_slot_y: 13.75     # over the battery top goes down its sides, through the plate and joins underneath (v3 audit:
                           # the v2 slots sat under the battery, where no strap could reach them)
@@ -63,7 +68,7 @@ geometry_mm:
     camera: {size: [17.5, 21.0, 15.0], y_centre: 2.75, z0: 11.0}   # XIAO ESP32-S3 Sense [y, z, depth], camera face taped to the
                                                                   # arch's back, lens through the opening; offset to +y to clear the USB charging plug
   min_clearance: 1.0
-  prop_tip_gap: 1.0       # used as the minimum prop-to-anything gap
+  prop_tip_gap: 3.0       # minimum prop-to-anything gap (v4 review L10: was 1.0, the camera sat 1.6 mm under the front props)
 
 materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
   pla_print:  {density: 1240, E: 3.0e+9, nu: 0.36, strength: 2.5e+7}   # 100 % infill, layer-line knockdown included
@@ -72,16 +77,16 @@ materials:   # density kg/m^3, E Pa, nu, strength Pa (design allowable)
 parts:
   motor:      {qty: 4, mass_g: 4.0,  envelope_mm: {diameter: 8.5, height: 20.0}, ref: "8520 coreless brushed, high-speed (~53,000 rpm at 3.7 V), 1.0 mm shaft"}
   prop:       {qty: 4, mass_g: 0.6,  ref: "65 mm 2-blade push-fit"}
-  battery:    {qty: 1, mass_g: 16.0, x_offset: -1.5, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 600 mAh 40C low-IR (GNB / BetaFPV class), PH2.0"}
+  battery:    {qty: 1, mass_g: 16.0, x_offset: -1.5, envelope_mm: {x: 48.0, y: 25.0, z: 8.0}, ref: "1S 3.7 V 550-600 mAh 40C low-IR (GNB / BetaFPV class), BT2.0 (v4: the PH2.0 is rated 2 A)"}
   board:      {qty: 1, mass_g: 8.0,  ref: "school-milled 2-layer FR4 46x38x1.6 with MOSFETs, LDO, passives, headers"}
   esp32:      {qty: 1, mass_g: 6.0,  ref: "ESP32 D1 mini (classic ESP32-WROOM-32)"}
   imu:        {qty: 1, mass_g: 2.0,  ref: "MPU-6050 GY-521 breakout"}
-  charger:    {qty: 1, mass_g: 2.0,  ref: "TP4056 module with protection"}
+  charger:    {qty: 0, mass_g: 2.0,  ref: "TP4056 module with protection (v4: not fitted, external 1S charger)"}
   hardware:   {qty: 1, mass_g: 1.5,  ref: "4x M2 screws, battery strap"}
-  wiring:     {qty: 1, mass_g: 2.0,  ref: "motor leads, battery lead"}
+  wiring:     {qty: 1, mass_g: 2.6,  ref: "motor leads, 22 AWG BT2.0 battery pigtail + connector pair, two wire links"}
   # v3 autonomy hardware (masses: typical listings, VERIFY)
   flow:       {qty: 1, mass_g: 1.2,  ref: "PMW3901 optical-flow breakout (SPI, 3.3 V)"}
-  tof:        {qty: 1, mass_g: 0.6,  ref: "VL53L1X ToF breakout (I2C, 3.3 V, 4 m)"}
+  tof:        {qty: 1, mass_g: 0.6,  ref: "VL53L1X ToF breakout (I2C, 3.3 V; firmware runs short mode, 50 Hz, ~1.3 m)"}
   camera:     {qty: 1, mass_g: 5.0,  ref: "Seeed XIAO ESP32-S3 Sense (OV2640/OV3660 camera, Wi-Fi)"}
   autonomy_wiring: {qty: 1, mass_g: 1.5, ref: "sensor + companion leads, foam tape"}
 
@@ -110,6 +115,7 @@ motor:   # 8520 coreless, typical listing figures (VERIFY: spin up on a bench su
   max_current_a: 3.5
 
 propeller:  # 65 mm toy 2-blade, static coefficients (n in rev/s, D in m)
+  blades: 2               # blade-pass frequency = 2 x rotor (review: the report assumed v1's 3)
   ct: 0.095
   cp: 0.050
   duct_thrust_gain: 1.0
@@ -164,4 +170,6 @@ sim:
     cmd_v_max: [1.0, 1.0, 0.6]    # m/s, stick / companion velocity commands
     a_max_xy: 4.0                 # m/s^2 (~22 deg of tilt)
     max_tilt_rad: 0.5             # 29 deg
-    flow_hz: 100                  # PMW3901 rate; the KF also runs the ToF at this rate
+    flow_hz: 100                  # PMW3901 rate (the companion sends SENS frames at 100 Hz)
+    tof_hz: 50                    # VL53L1X short mode, 20 ms timing budget (companion.ino): a fresh range every 2nd frame
+    tof_max_range_m: 1.3          # short mode, indoor; beyond this the KF gets no height (v4 review L9)

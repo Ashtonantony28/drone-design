@@ -15,7 +15,8 @@ floating parts) on the exact solids.
              pads, plated drills; bottom-side SMD parts with real bodies, terminations and
              gull-wing leads; through-hole parts with pins and solder fillets; M2 screws
   modules    ESP32 MiniKit on female headers (male pins in the socket cavities), GY-521 on
-             its pin header, TP4056 module on three pins, battery lead and PH2.0 plug
+             its pin header; v4 power path: BT2.0 pigtail in the J1 holes with the mated
+             connector pair lying aft, wire links across SW1 and JP1, no TP4056 module
   autonomy   PMW3901 / VL53L1X breakouts on foam tape on the tail-tab rims, XIAO ESP32-S3
              Sense stack (board-to-board connector, OV2640 with its lens through the arch)
              held to the arch by a zip tie
@@ -392,6 +393,17 @@ def board_detail(spec):
         return _union(pins), _union(fil)
 
     zt = z1 + SOL   # top tin face
+    v4 = "battery_connector" in g     # v4 power path: BT2.0 pigtail in J1, SW1 bridged, JP1 bridged, no TP4056
+    if v4 and not g["charger_module"].get("fit", True):
+        jp = next(f for f in fps if f["ref"] == "JP1")
+        a_, b_ = _pads(jp)
+        zb_ = z0 - SOL - 0.3
+        bar = wire([(a_["x"], a_["y"] + 0.6 * (1 if a_["y"] > b_["y"] else -1), zb_),
+                    (b_["x"], b_["y"] - 0.6 * (1 if a_["y"] > b_["y"] else -1), zb_)], r=0.3)
+        out.append(DPart("LINK2: JP1 bridged (battery -), 22 AWG flat", "avionics", bar, COPPER, 0.9, 0.3))
+        for q in (a_, b_):
+            blob = rbox(q["x"] - 0.55, q["x"] + 0.55, q["y"] - 0.55, q["y"] + 0.55, z0 - SOL - 0.5, 0.5, rv=0.3, rb=0.2) - bar
+            out.append(DPart("LINK2 solder", "avionics", blob, SOLDER, 0.85, 0.3))
     for fp in fps:
         kind, ref = fp["footprint"], fp["ref"]
         pads = _pads(fp)
@@ -412,6 +424,16 @@ def board_detail(spec):
             legs, fil = tht_pins(pads, zb, s=0.5, round_=True)
             out.append(DPart(label + " legs", "avionics", legs, SILVER, 0.9, 0.3, "top"))
             out.append(DPart(label + " solder", "avionics", fil, SOLDER, 0.85, 0.3))
+        elif kind.startswith("SW_SPDT") and v4:
+            # v4 (review L1): no switch; a bare wire link from COM (pad 2) to throw B (pad 3, VBAT)
+            pd = {q["num"]: q for q in pads} if all("num" in q for q in pads) else None
+            pc, pb = (pd["2"], pd["3"]) if pd else sorted(pads, key=lambda q: q["x"])[1:3]
+            zl = zt + 0.9
+            link = wire([(pc["x"], pc["y"], z0 - SOL - 0.6), (pc["x"], pc["y"], zl), (pb["x"], pb["y"], zl),
+                         (pb["x"], pb["y"], z0 - SOL - 0.6)], r=0.32, bend=0.35)
+            out.append(DPart("LINK1: SW1 bridged (COM to VBAT), 22 AWG", "avionics", link, COPPER, 0.9, 0.3))
+            _, fil = tht_pins([pc, pb], zt, s=0.64, round_=True)
+            out.append(DPart("LINK1 solder", "avionics", fil, SOLDER, 0.85, 0.3))
         elif kind.startswith("SW_SPDT"):
             cx, cy = sum(p["x"] for p in pads) / 3, sum(p["y"] for p in pads) / 3
             # SS-12D00 body 8.5 x 3.5 mm (datasheet), clear of J1 and the screw head
@@ -425,6 +447,38 @@ def board_detail(spec):
             pins, fil = tht_pins(pads, zt, s=0.5)
             out.append(DPart(label + " pins", "avionics", pins, SILVER, 0.9, 0.3, "top"))
             out.append(DPart(label + " solder", "avionics", fil, SOLDER, 0.85, 0.3))
+        elif kind.startswith("JST_PH") and v4:
+            # v4 (review L1): BT2.0 pigtail soldered into the J1 holes, connector pair lying aft
+            bc = g["battery_connector"]
+            cy = bc["y_centre"]
+            zc0 = zt + bc["z_above_board"]
+            zcc = zc0 + bc["height"] / 2
+            xf, xr_ = bc["x"][1], bc["x"][0]
+            xm = (xf + xr_) / 2 + 0.5
+            hw, hh = bc["width"] / 2, bc["height"]
+            pads_s = sorted(pads, key=lambda q: q["x"])        # J1: + is the -x pad (BAT_P at x -14)
+            pos_pad, neg_pad = pads_s[0], pads_s[1]
+            wires = []
+            for pp, yk, col, nm in ((pos_pad, cy - 1.5, RED, "red, +"), (neg_pad, cy + 1.5, WIRE_BLK, "black, -")):
+                core = Pos(pp["x"], pp["y"], z0 - SOL - 0.8) * Cylinder(0.32, zt + 0.8 - (z0 - SOL - 0.8), align=C)
+                wires.append(DPart(f"Battery pigtail core ({nm})", "avionics", core, COPPER, 0.9, 0.3))
+                ins = wire([(pp["x"], pp["y"], zt + 0.8), (pp["x"], pp["y"], zcc), (pp["x"], yk, zcc), (xf - 0.6, yk, zcc)],
+                           r=0.6, bend=0.6)
+                wires.append(DPart(f"Battery pigtail 22 AWG ({nm})", "avionics", ins, col, 0.0, 0.7))
+            out += wires
+            _, fil = tht_pins(pads, zt, s=0.64, round_=True)
+            out.append(DPart("J1 pigtail solder", "avionics", fil, SOLDER, 0.85, 0.3))
+            # mated BT2.0 pair: board-side housing (front) and the pack's plug (rear), latch ridge on top
+            front = rbox(xm, xf, cy - hw, cy + hw, zc0, hh, rv=0.4, rt=0.3, rb=0.3)
+            front -= rbox(xf - 0.6, xf + 0.1, cy - hw + 0.8, cy + hw - 0.8, zc0 + 0.8, hh - 1.6, rv=0.2)  # wire entry recess
+            front += rbox(xm + 1.0, xm + 4.0, cy - 1.5, cy + 1.5, zc0 + hh, 0.6, rv=0.3, rt=0.25)   # latch ridge
+            out.append(DPart("BT2.0 connector (board pigtail)", "avionics", front, 0x1C1C1C, 0.0, 0.55, "battery_connector"))
+            rear = rbox(xr_, xm, cy - hw + 0.2, cy + hw - 0.2, zc0 + 0.2, hh - 0.4, rv=0.4, rt=0.3, rb=0.3)
+            rear += rbox(xr_ + 1.0, xr_ + 3.0, cy - hw, cy + hw, zc0, hh, rv=0.3, rt=0.3, rb=0.3)   # grip ribs
+            for yy in (cy - 1.5, cy + 1.5):                                                        # lead entry bores
+                rear -= Pos(xr_ - 0.01, yy, zcc) * Rot(0, 90, 0) * Cylinder(0.5, 0.62, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            out.append(DPart("BT2.0 plug (battery lead)", "battery", rear, 0xB03A2E, 0.0, 0.55, "battery_connector"))
+            out.append(("_plug", (xr_ + 0.61, cy, zcc, [cy - 1.5, cy + 1.5])))   # leads end on the bore bottoms
         elif kind.startswith("JST_PH"):
             cx, cy = sum(p["x"] for p in pads) / 2, sum(p["y"] for p in pads) / 2
             Hs = 6.0
@@ -651,6 +705,19 @@ def battery_detail(spec, plug_info):
     strap -= rbox(-ws / 2 - 1, ws / 2 + 1, -yo + th, yo - th, -th + th, zt - (-th + th))  # hollow: the loop
     out.append(DPart("Battery strap (hook-and-loop)", "battery", strap, STRAP, 0.0, 0.9))
     # battery lead: from the tab end, behind the cell, up past the board edge, over to the plug
+    if "battery_connector" in g:
+        # v4: aft of the cell, out over the tail tab, up and forward into the BT2.0 plug's rear face
+        for (xe, cy, zc, ys) in plug_info:
+            xr_face = xe - 0.61                         # the plug's rear face (leads go into its bores)
+            for k, (ye, col) in enumerate(zip(ys, (RED, WIRE_BLK))):
+                yk = -2.5 + 2.0 * k
+                xr = xb0 - 0.9 - 1.0 * k
+                zm = z + 9.0 + 1.6 * k                  # black runs 1.6 mm higher, so it crosses over red
+                xo = xr_face - 2.5 + 1.5 * k            # red turns up further aft, so the risers don't cross
+                pts = [(xb0, yk, z + 4.0), (xr, yk, z + 4.0), (xr, yk, zm), (xo, yk, zm), (xo, ye, zm),
+                       (xo, ye, zc), (xe, ye, zc)]
+                out.append(DPart(f"Battery lead ({'red' if col == RED else 'black'})", "battery", wire(pts, r=0.4, bend=0.4), col, 0.0, 0.7))
+        return out
     for (cx, cy, ztop, pxs) in plug_info:
         for k, (px, col) in enumerate(sorted(zip(pxs, (RED, WIRE_BLK)))):
             yk = -2.5 + 2.0 * k                     # leaves the tab band side by side
@@ -764,11 +831,13 @@ def build_detail(spec=None, with_guard=True):
         ref = min(motor_pads, key=lambda r: math.hypot(motor_pads[r][0] - x, motor_pads[r][1] - y))
         parts += motor_leads(spec, i, x, y, motor_pads[ref][2], d["board_z1"])
     parts += board
-    parts += esp32_detail(spec, pads["U1"]) + imu_detail(spec, pads["U2"]) + charger_detail(spec, pads["U3"])
+    parts += esp32_detail(spec, pads["U1"]) + imu_detail(spec, pads["U2"])
+    if g["charger_module"].get("fit", True):
+        parts += charger_detail(spec, pads["U3"])
     parts += battery_detail(spec, plug_info)
     parts += autonomy_detail(spec)
     if with_guard:
-        parts.append(DPart(f"Clip-on prop guard (optional, {g['guard']['height']:.0f} mm PETG)", "guard", guard(spec), PETG_GUARD, 0.0, 0.6))
+        parts.append(DPart("Clip-on prop guard (optional, PETG, rings at rotor height)", "guard", guard(spec), PETG_GUARD, 0.0, 0.6))
     for i, (x, y) in enumerate(motor_xy(spec)):
         parts.append(DPart(f"Prop {i} swept disc", "sweep", prop_disk(spec, x, y), 0x2E86C1, 0.0, 0.6, opacity=0.15))
     return parts

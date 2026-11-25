@@ -206,4 +206,80 @@ TEST(closed_loop_link_loss_stops_motors) {
   for (float d : r.out.motor) CHECK(d == 0.0f);
 }
 
+TEST(closed_loop_dead_imu_stops_motors) {
+  Rig r;
+  r.sim.ground = false;
+  r.sim.p.z = 2.0f;
+  r.calibrate_in_hand();
+  r.st.throttle = 0.59f;
+  r.run(0.3f);
+  r.imu_ok = false;  // I2C dies: every read fails
+  r.run(0.015f);
+  CHECK(r.out.state == State::ARMED);  // a few missed reads are ridden through
+  r.run(0.01f);
+  CHECK(r.out.state == State::DISARMED);
+  CHECK(r.out.flags & IMU_FAIL);
+  for (float d : r.out.motor) CHECK(d == 0.0f);
+  // and it won't arm again on a dead IMU
+  r.st.throttle = 0.0f;
+  r.arm(true);
+  CHECK(r.out.state == State::DISARMED && (r.out.flags & IMU_FAIL));
+  r.imu_ok = true;
+  r.run(0.05f, 3.9f, true);
+  r.arm(true);
+  CHECK(r.out.state == State::ARMED);
+}
+
+static float battery_land_angle(float accel_bias_z, float* z0_out = nullptr, float* tilt_out = nullptr) {
+  Rig r;
+  r.sim.accel_bias = {0.0f, 0.0f, accel_bias_z};
+  r.sim.p.z = 1.5f;
+  r.calibrate_in_hand();
+  r.st.throttle = 0.59f;  // hovering on the trigger, which the pilot keeps holding
+  r.run(1.0f);
+  const float z0 = r.sim.p.z;
+  r.run(1.9f, 3.2f);      // sagging under load, below vbat_land
+  CHECK(!(r.out.flags & BATTERY_LAND));
+  r.run(0.2f, 3.2f);
+  CHECK(r.out.flags & BATTERY_LAND);
+  float td = -1;
+  for (int k = 0; k < 1500 && td < 0; ++k) {
+    const float vz = r.sim.v.z;
+    r.run(0.01f, 3.2f);
+    if (r.sim.p.z <= 0.0f) td = -vz;
+  }
+  if (z0_out) *z0_out = z0;
+  if (tilt_out) *tilt_out = deg(nf::tilt_angle(r.sim.q));
+  return td;
+}
+
+TEST(closed_loop_low_battery_lands_in_angle_mode) {
+  float z0 = 0, tilt = 0;
+  const float td = battery_land_angle(0.0f, &z0, &tilt);
+  std::printf("  low battery in angle mode from %.2f m: touchdown %.2f m/s\n", z0, td);
+  CHECK(td >= 0.0f && td < 1.5f);
+  CHECK(tilt < 10.0f);
+  // an accelerometer z bias of +-0.15 m/s^2 (typical MPU-6050 after mounting) still lands softly
+  const float biases[2] = {-0.15f, 0.15f};
+  for (float b : biases) {
+    const float tb = battery_land_angle(b);
+    std::printf("    with accel bias %+.2f m/s^2: touchdown %.2f m/s\n", b, tb);
+    CHECK(tb >= 0.0f && tb < 1.5f);
+  }
+}
+
+TEST(closed_loop_battery_cutoff) {
+  Rig r;
+  r.sim.ground = false;
+  r.sim.p.z = 2.0f;
+  r.calibrate_in_hand();
+  r.st.throttle = 0.59f;
+  r.run(0.3f);
+  r.run(0.9f, 2.9f);
+  CHECK(r.out.state == State::ARMED);
+  r.run(0.2f, 2.9f);
+  CHECK(r.out.state == State::DISARMED && (r.out.flags & BATTERY_CUTOFF));
+  for (float d : r.out.motor) CHECK(d == 0.0f);
+}
+
 int main() { return nftest::run_all(); }
