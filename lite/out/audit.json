@@ -1,5 +1,5 @@
 {
- "parts": 222,
+ "parts": 213,
  "clashes": [],
  "allowed": [],
  "invalid": [],
@@ -10,31 +10,31 @@
    "prop": 0,
    "min_clearance_mm": 1.0,
    "nearest": "003 Motor 0 bearing boss",
-   "min_clearance_off_motor_mm": 1.6,
-   "nearest_off_motor": "212 XIAO ESP32-S3 (main board)"
+   "min_clearance_off_motor_mm": 3.05,
+   "nearest_off_motor": "212 Clip-on prop guard (optional, PETG, rings at rotor height)"
   },
   {
    "prop": 1,
    "min_clearance_mm": 1.0,
    "nearest": "013 Motor 1 bearing boss",
-   "min_clearance_off_motor_mm": 1.6,
-   "nearest_off_motor": "215 Sense expansion board"
+   "min_clearance_off_motor_mm": 3.05,
+   "nearest_off_motor": "212 Clip-on prop guard (optional, PETG, rings at rotor height)"
   },
   {
    "prop": 2,
    "min_clearance_mm": 1.0,
    "nearest": "023 Motor 2 bearing boss",
-   "min_clearance_off_motor_mm": 8.499,
-   "nearest_off_motor": "163 Tact switch"
+   "min_clearance_off_motor_mm": 3.05,
+   "nearest_off_motor": "212 Clip-on prop guard (optional, PETG, rings at rotor height)"
   },
   {
    "prop": 3,
    "min_clearance_mm": 1.0,
    "nearest": "033 Motor 3 bearing boss",
-   "min_clearance_off_motor_mm": 7.27,
-   "nearest_off_motor": "157 ESP32-WROOM-32 shield can"
+   "min_clearance_off_motor_mm": 3.05,
+   "nearest_off_motor": "212 Clip-on prop guard (optional, PETG, rings at rotor height)"
   }
  ],
- "contacts": 287,
+ "contacts": 277,
  "result": "PASS"
 }
