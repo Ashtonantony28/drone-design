@@ -1,0 +1,63 @@
+{
+ "nominal": {
+  "follow_static": {
+   "err_after_8s_max_m": 0.08103567085376776,
+   "facing_err_max_deg": 3.872298556349842,
+   "seen_frac": 1.0,
+   "unflyable": 0
+  },
+  "follow_moving": {
+   "err_moving_max_m": 0.3086900112256771,
+   "err_4s_after_stop_max_m": 0.07779272833716769,
+   "longest_unseen_s": 0.0,
+   "unflyable": 0
+  },
+  "approach_land": {
+   "land_err_max_m": 0.07613524085821664,
+   "touchdown_max": 0.4248654544353485,
+   "landed": 1.0,
+   "disarmed": 1.0,
+   "unflyable": 0
+  },
+  "tag_removed": {
+   "speed_1p5s_after_max": 0.07807298004627228,
+   "drift_max_m": 0.08547051250934601,
+   "unflyable": 0
+  },
+  "search": {
+   "err_at_15s_max_m": 0.06423851138460687,
+   "unflyable": 0
+  }
+ },
+ "pessimistic": {
+  "follow_static": {
+   "err_after_8s_max_m": 0.06958773150954299,
+   "facing_err_max_deg": 3.0016814731897425,
+   "seen_frac": 1.0,
+   "unflyable": 3
+  },
+  "follow_moving": {
+   "err_moving_max_m": 0.28930572828263706,
+   "err_4s_after_stop_max_m": 0.0601185542394379,
+   "longest_unseen_s": 0.0,
+   "unflyable": 3
+  },
+  "approach_land": {
+   "land_err_max_m": 0.06835878933815191,
+   "touchdown_max": 0.40856364369392395,
+   "landed": 1.0,
+   "disarmed": 1.0,
+   "unflyable": 3
+  },
+  "tag_removed": {
+   "speed_1p5s_after_max": 0.05650128796696663,
+   "drift_max_m": 0.05496323108673096,
+   "unflyable": 3
+  },
+  "search": {
+   "err_at_15s_max_m": 0.06304750689342653,
+   "unflyable": 3
+  }
+ },
+ "failures": []
+}

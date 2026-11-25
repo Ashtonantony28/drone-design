@@ -1,0 +1,21 @@
+(version 1)
+# Mill rules for the NF-3D Lite flight controller (lite/ecad/MILLING.md).
+# Signals stay on the bottom copper; the top copper carries only VBAT and GND
+# (MILLING.md "Top side"), between top-solderable through-hole pads and wire vias.
+(rule "top copper: VBAT and GND only"
+    (layer F.Cu)
+    (condition "A.Type == 'track' && A.NetName != 'VBAT' && A.NetName != 'GND'")
+    (constraint disallow track))
+# Battery and motor current: 1.0 mm minimum ...
+(rule "power width"
+    (condition "A.NetClass == 'Power'")
+    (constraint track_width (min 1.0mm)))
+# ... except the 0.5 mm stubs between the 0.95 mm pitch pins of the LDO (U4, SOT-23-5).
+(rule "power width at U4"
+    (condition "A.NetClass == 'Power' && A.intersectsCourtyard('U4')")
+    (constraint track_width (min 0.5mm)))
+# Layer changes only through 1.0 mm drilled wire vias.
+(rule "wire vias"
+    (condition "A.Type == 'via'")
+    (constraint hole_size (min 1.0mm))
+    (constraint via_diameter (min 2.0mm)))

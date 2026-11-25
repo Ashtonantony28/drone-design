@@ -1,0 +1,196 @@
+"""NF-3D Lite flight controller: 46 x 38 mm, 2-layer unplated board for a desktop CNC mill.
+
+All signals run on the bottom copper; the top copper carries only VBAT and GND links
+(between top-solderable through-hole pads and 1.0 mm wire vias, listed in MILLING.md).
+
+ESP32 "D1 mini" (MH-ET LIVE MiniKit) on female headers, GY-521 MPU-6050 on a 1x8
+header, four AO3400A low-side brushed-motor switches, TP4056 charger module,
+ME6211 3.3 V LDO. Mill rules, placement and assembly: lite/ecad/MILLING.md.
+
+Verify (from lite/ecad/): `pcb build boards/lite_fc/lite_fc.zen` and `pytest -q check_board.py`.
+
+Power path (VBAT is switched on the high side, as the brief asks):
+    battery (PH2.0) -> TP4056 B+/B- ; B+ (same copper as the module's OUT+) -> SW1 COM -> SW1 B = VBAT
+    TP4056 OUT- (behind the DW01 protection FETs) = board GND
+    JP1 (open) bridges OUT- to B-: closing it bypasses the module's protection FETs, which
+    trip at roughly 3 A (VERIFY on your module) while four 8520 motors can pull 6-8 A.
+
+Pin map (ESP32 MiniKit inner rows; RIOT-OS esp32-mh-et-live-minikit pinout):
+    GPIO22 SCL, GPIO21 SDA (I2C to the MPU-6050), GPIO23 MPU INT
+    GPIO17 M4 front-left, GPIO16 M2 front-right, GPIO26 M3 rear-left, GPIO19 M1 rear-right
+    (Betaflight QUAD-X numbering, nose = board +x)
+    GPIO36 (ADC1_CH0) battery sense, 100k / 47k divider; GPIO18 status LED
+    No motor on a strapping pin (0, 2, 5, 12, 15) or an input-only pin (34-39).
+"""
+
+load("@stdlib/board_config.zen", "BoardConfig", "Constraints", "Copper", "DesignRules", "Holes", "NetClass", "Zones")
+load("../../modules/parts.zen", "place")
+
+Placed = Module("../../modules/placed.zen")
+
+# Order codes for the generic parts: VERIFY before buying (any equivalent will do).
+_SAMSUNG = "Samsung"
+_UNIOHM = "UniOhm"
+
+
+def _part(mpn, manufacturer, value):
+    return {"mpn": mpn, "manufacturer": manufacturer, "value": value}
+
+
+# --- nets ---
+GND = Ground("GND")
+BAT_P = Power("BAT_P", voltage="3.0V to 4.2V")  # battery +, before the switch
+BAT_N = Net("BAT_N")  # battery -, before the module's protection FETs
+VBAT = Power("VBAT", voltage="3.0V to 4.2V")  # switched battery: motors, LDO, sense
+V3V3 = Power("3V3", voltage="3.2V to 3.4V (3.3V)")
+I2C_SCL = Net("I2C_SCL")
+I2C_SDA = Net("I2C_SDA")
+IMU_INT = Net("IMU_INT")
+VBAT_SENSE = Net("VBAT_SENSE")
+LED = Net("LED")
+LED_A = Net("LED_A")
+
+# --- ESP32 MiniKit (U1) ---
+# Pads L<row> / R<row> are the inner left / right pin rows, row 1 at the antenna end.
+MOTOR_GPIO = {"M1": "L5", "M2": "R6", "M3": "L3", "M4": "R5"}  # GPIO19, GPIO16, GPIO26, GPIO17
+PWM = {m: Net(m + "_PWM") for m in ["M1", "M2", "M3", "M4"]}
+
+place(
+    Placed,
+    "U1",
+    "ESP32_MiniKit",
+    "ESP32_MiniKit_InnerRows_Mill",
+    {
+        "IO36": VBAT_SENSE,  # L2, ADC1_CH0 (input only)
+        "IO26": PWM["M3"],  # L3
+        "IO18": LED,  # L4
+        "IO19": PWM["M1"],  # L5
+        "IO23": IMU_INT,  # L6
+        "IO5": NotConnected(),  # L7, strapping pin: left free
+        "3V3": V3V3,  # L8, fed by U4 (bypasses the module's own regulator)
+        "IO22": I2C_SCL,  # R3
+        "IO21": I2C_SDA,  # R4
+        "IO17": PWM["M4"],  # R5
+        "IO16": PWM["M2"],  # R6
+        "GND": GND,  # R7
+        "5V": NotConnected(),  # R8, only live when the module is on USB
+    },
+    mpn="ESP32 MiniKit",
+    manufacturer="MH-ET LIVE",
+    value="ESP32 MiniKit (MH-ET LIVE D1 mini, ESP32-WROOM-32)",
+)
+
+# --- IMU (U2): GY-521 breakout; it has its own regulator, I2C pull-ups and AD0 pull-down (VERIFY) ---
+# VCC is fed from VBAT (3.0-4.2 V), not 3V3: the breakout's own 3.3 V LDO (and its I2C pull-ups
+# behind it) then make the MPU-6050 rail, and the 3V3 net only has to reach the ESP32. That keeps
+# the 3V3 track out of the channel between the ESP32 left header and the IMU header, which the
+# INT line needs (single-sided routing). At VBAT < ~3.4 V the breakout LDO drops out and the
+# MPU-6050 runs at VBAT minus ~0.1-0.2 V, still inside its 2.375-3.46 V range (VERIFY the LDO).
+place(
+    Placed,
+    "U2",
+    "GY521",
+    "GY521_MPU6050_Mill",
+    {
+        "VCC": VBAT,
+        "GND": GND,
+        "SCL": I2C_SCL,
+        "SDA": I2C_SDA,
+        "XDA": NotConnected(),
+        "XCL": NotConnected(),
+        "AD0": NotConnected(),  # pulled low on the breakout: address 0x68
+        "INT": IMU_INT,
+    },
+    mpn="GY-521",
+    manufacturer="generic",
+    value="GY-521 MPU-6050",
+)
+place(Placed, "C4", "C", "C_1206_Mill", {"1": VBAT, "2": GND}, prefix="C", **_part("CL31B104KBCNNNC", _SAMSUNG, "100nF 50V X7R 1206"))
+
+# --- power entry ---
+place(Placed, "J1", "Conn_Battery", "JST_PH_B2B_Vertical_Mill", {"-": BAT_N, "+": BAT_P}, prefix="J",
+      **_part("B2B-PH-K-S", "JST", "JST PH2.0 2-pin vertical (battery)"))
+place(Placed, "U3", "TP4056_Module", "TP4056_Protected_Module_Mill", {"B+": BAT_P, "B-": BAT_N, "OUT-": GND},
+      **_part("TP4056 03962A module", "generic", "TP4056 + DW01 charger module (03962A)"))
+place(Placed, "SW1", "SW_SPDT", "SW_SPDT_SS12D00_Mill", {"A": NotConnected(), "COM": BAT_P, "B": VBAT}, prefix="SW",
+      **_part("SS-12D00G3", "generic", "SS-12D00 SPDT slide switch"))
+place(Placed, "JP1", "SolderJumper", "SolderJumper_2_Open_Mill", {"1": GND, "2": BAT_N}, prefix="JP",
+      value="protection bypass (open)", in_bom=False)
+place(Placed, "C1", "CP", "CP_Radial_D6.3_P2.5_Mill", {"+": VBAT, "-": GND}, prefix="C", **_part("470uF 6.3V D6.3 radial", "generic", "470uF 6.3V electrolytic D6.3"))
+
+# --- 3.3 V: ME6211C33 LDO, CE tied to VIN ---
+place(Placed, "U4", "ME6211", "SOT-23-5_Mill", {"VIN": VBAT, "VSS": GND, "CE": VBAT, "VOUT": V3V3},
+      mpn="ME6211C33M5G-N", manufacturer="Microne", value="ME6211C33M5G 3.3V 500mA LDO")
+place(Placed, "C2", "C", "C_1206_Mill", {"1": VBAT, "2": GND}, prefix="C", **_part("CL31A106KPHNNNE", _SAMSUNG, "10uF 10V X5R 1206"))
+place(Placed, "C3", "C", "C_1206_Mill", {"1": V3V3, "2": GND}, prefix="C", **_part("CL31A106KPHNNNE", _SAMSUNG, "10uF 10V X5R 1206"))
+
+# --- battery sense: 4.2 V -> 1.34 V at GPIO36 ---
+place(Placed, "R9", "R", "R_1206_Mill", {"1": VBAT, "2": VBAT_SENSE}, prefix="R", **_part("1206W4F1003T5E", _UNIOHM, "100k 1% 1206"))
+place(Placed, "R10", "R", "R_1206_Mill", {"1": VBAT_SENSE, "2": GND}, prefix="R", **_part("1206W4F4702T5E", _UNIOHM, "47k 1% 1206"))
+
+# --- status LED ---
+place(Placed, "R11", "R", "R_1206_Mill", {"1": LED, "2": LED_A}, prefix="R", **_part("1206W4F3300T5E", _UNIOHM, "330R 1% 1206"))
+place(Placed, "D5", "LED", "LED_D3.0_Mill", {"K": GND, "A": LED_A}, prefix="D", **_part("3mm LED", "generic", "3mm LED"))
+
+# --- four low-side motor switches ---
+for i, m in enumerate(["M1", "M2", "M3", "M4"]):
+    n = i + 1
+    gate = Net(m + "_G")
+    drain = Net(m + "_N")  # motor -, MOSFET drain, flyback anode
+    place(Placed, "Q%d" % n, "NMOS_GSD", "SOT-23_Mill", {"G": gate, "S": GND, "D": drain}, prefix="Q",
+          mpn="AO3400A", manufacturer="Alpha & Omega", value="AO3400A")
+    place(Placed, "R%d" % n, "R", "R_1206_Mill", {"1": PWM[m], "2": gate}, prefix="R", **_part("1206W4F1000T5E", _UNIOHM, "100R 1% 1206"))
+    place(Placed, "R%d" % (n + 4), "R", "R_1206_Mill", {"1": gate, "2": GND}, prefix="R", **_part("1206W4F1002T5E", _UNIOHM, "10k 1% 1206"))
+    place(Placed, "D%d" % n, "D_Schottky", "D_SMA_SOD-123_Mill", {"K": VBAT, "A": drain}, prefix="D",
+          **_part("B5819W", "Changjiang (CJ)", "B5819W Schottky 1A 40V SOD-123"))
+    place(Placed, m, "Motor", "MotorPads_2_P5.0_Mill", {"+": VBAT, "-": drain}, prefix="M", value="8520 brushed motor pads",
+          in_bom=False)
+
+# --- M2 mounting holes at (+-19, +-15) mm ---
+for _i in range(4):
+    Component(
+        name="H{}".format(_i + 1),
+        prefix="H",
+        symbol=Symbol(library="../../lib/symbols/MountingHole.kicad_sym"),
+        footprint=File("../../lib/footprints/MountingHole_2.2mm_M2_Mill.kicad_mod"),
+        pins={},
+        skip_bom=True,
+        skip_pos=True,
+    )
+
+# --- mill rules (lite/ecad/MILLING.md): 0.5 mm signal, 1.0 mm power, 0.4 mm clearance,
+# 0.8 mm minimum drill, no vias (the extra rules live in layout/lite_fc.kicad_dru) ---
+MILL_TRACK = 0.5
+MILL_POWER_TRACK = 1.0
+MILL_CLEARANCE = 0.4
+MILL_DRILL = 0.8
+
+Board(
+    name="lite_fc",
+    layers=2,
+    layout_path="layout/lite_fc",
+    track_widths=[MILL_TRACK, 0.6, MILL_POWER_TRACK, 1.5, 2.0],
+    config=BoardConfig(
+        design_rules=DesignRules(
+            constraints=Constraints(
+                copper=Copper(
+                    minimum_clearance=MILL_CLEARANCE,
+                    minimum_track_width=MILL_TRACK,
+                    minimum_connection_width=MILL_TRACK,
+                    minimum_annular_width=0.25,
+                    minimum_via_diameter=2.0,
+                    copper_to_hole_clearance=0.5,
+                    copper_to_edge_clearance=0.5,
+                ),
+                holes=Holes(minimum_through_hole=MILL_DRILL, hole_to_hole_clearance=0.5),
+                zones=Zones(minimum_clearance=0.5),
+            ),
+            netclasses=[
+                NetClass(name="Default", clearance=MILL_CLEARANCE, track_width=0.6, via_diameter=2.0, via_drill=1.0),
+                # battery and motor current (assigned in layout/place.py)
+                NetClass(name="Power", clearance=MILL_CLEARANCE, track_width=MILL_POWER_TRACK, via_diameter=2.0,
+                         via_drill=1.0, color="#C20000FF"),
+            ],
+        ),
+    ),
+)

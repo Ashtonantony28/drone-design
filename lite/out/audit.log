@@ -1,0 +1,12 @@
+FIT
+  PASS
+222 parts, 287 touching pairs
+clashes: 0  (allowed with a reason: 0)
+floating: 0
+invalid solids: 0
+  prop 0 swing clearance 1.00 mm to 003 Motor 0 bearing boss; off its motor 1.60 mm to 212 XIAO ESP32-S3 (main board)
+  prop 1 swing clearance 1.00 mm to 013 Motor 1 bearing boss; off its motor 1.60 mm to 215 Sense expansion board
+  prop 2 swing clearance 1.00 mm to 023 Motor 2 bearing boss; off its motor 8.50 mm to 163 Tact switch
+  prop 3 swing clearance 1.00 mm to 033 Motor 3 bearing boss; off its motor 7.27 mm to 157 ESP32-WROOM-32 shield can
+bare boxes (placeholder look): 0
+PASS

@@ -1,0 +1,25 @@
+ref,qty,value,package,side,mpn,manufacturer,notes
+U1,1,ESP32 MiniKit (MH-ET LIVE D1 mini),module 39x31 mm on 2.54 mm headers,top,ESP32 MiniKit,MH-ET LIVE,classic ESP32-WROOM-32; plugs into the inner rows only (left rows 2-8 and right rows 3-8); pinout VERIFY
+U1-hdr,1,female header 1x7 + 1x6 (cut from 1x40),2.54 mm 8.5 mm tall,top,generic,generic,left inner rows 2-8 and right inner rows 3-8; the module sits above the GY-521
+U2,1,GY-521 MPU-6050 breakout,1x8 2.54 mm header,top,GY-521,generic,header along its left edge with VCC at the -y end; VCC is fed from VBAT through the breakout's own 3.3 V LDO; AD0 pulled low on the breakout (0x68) VERIFY
+U3,0,TP4056 + DW01 charger module (not fitted in v4),26 x 17.5 mm module,top,-,-,v4: pads left empty; charge the pack off the drone with a 1S charger at 1C or less (its 1 A rate was 1.7C and its ~3 A protection tripped at hover)
+U4,1,ME6211C33M5G 3.3 V 500 mA LDO,SOT-23-5,bottom,ME6211C33M5G-N,Microne,CE tied to VIN under the body; feeds the ESP32 3V3 pin
+Q1-Q4,4,AO3400A N-MOSFET 30 V 5.7 A,SOT-23,bottom,AO3400A,Alpha & Omega,low-side motor switch
+D1-D4,4,MBR230LSFT1G Schottky 2 A 30 V,SOD-123FL,bottom,MBR230LSFT1G,onsemi,v4: 2 A flyback across each motor (the 1 A B5819W ran near its limit at mid-throttle); cathode band towards the motor + pad; must be <= 1.1 mm tall because the battery is ~1.5 mm under the board - an SMA part fits the pads but not the height
+R1-R4,4,100R 1%,1206,bottom,1206W4F1000T5E,UniOhm,gate resistor
+R5-R8,4,10k 1%,1206,bottom,1206W4F1002T5E,UniOhm,gate pull-down
+R9,1,100k 1%,1206,bottom,1206W4F1003T5E,UniOhm,battery sense divider top (VBAT -> GPIO36)
+R10,1,47k 1%,1206,bottom,1206W4F4702T5E,UniOhm,battery sense divider bottom (4.2 V -> 1.34 V)
+R11,1,330R 1%,1206,bottom,1206W4F3300T5E,UniOhm,LED resistor
+C1,1,470uF 6.3V electrolytic,radial D6.3 P2.5,top,470uF 6.3V D6.3 radial,generic,bulk on VBAT; + square pad on the edge side; leave 2 mm of lead so the GND pad can be soldered on the top too
+C2,1,10uF 10V X5R,1206,bottom,CL31A106KPHNNNE,Samsung,LDO input
+C3,1,10uF 10V X5R,1206,bottom,CL31A106KPHNNNE,Samsung,LDO output
+C4,1,100nF 50V X7R,1206,bottom,CL31B104KBCNNNC,Samsung,at the IMU supply pins (VBAT / GND)
+D5,1,3 mm LED,THT 2.54 mm,top,3mm LED,generic,status LED on GPIO18; cathode (square pad) towards -y; leave 2 mm of lead so the cathode can be soldered on the top too
+J1,1,BT2.0 battery pigtail 22 AWG ~40 mm,wires soldered into the J1 holes,top,BT2.0 pigtail (male),BetaFPV or equivalent,v4: replaces the 2 A PH2.0 header; red into +; connector lies aft along the rear-right corner; packs need a BT2.0 plug
+SW1,0,SS-12D00 slide switch (not fitted in v4),THT 3 pin 2.54 mm,top,-,-,v4: the 0.5 A switch is left out; LINK1 joins COM to throw B and the battery plug is the on/off switch
+JP1,0,solder jumper,pads only,bottom,-,-,v4: bridged by LINK2 (the battery's negative path with U3 not fitted)
+M1-M4,0,motor wire pads,THT 2.5 mm pads,top,-,-,8520 coreless motor leads: red to + (square pad); M1 rear-right M2 front-right M3 rear-left M4 front-left; M1+ M3+ M4+ are soldered on both sides (top VBAT track)
+H1-H4,0,M2 mounting holes,2.2 mm NPTH,-,-,-,frame bosses at (+-19 +-15) mm; use button-head (3.5 mm) screws
+LINK1-LINK2,2,22 AWG wire link,~5 mm,top (LINK1) / bottom (LINK2),-,-,v4: LINK1 = SW1 COM to throw B (VBAT); LINK2 across JP1 laid flat (battery 1.5 mm below)
+WIRE,5,wire vias,1.0 mm drill,both,-,-,0.6-0.8 mm tinned copper wire soldered on both sides and trimmed flush (MILLING.md)

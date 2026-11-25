@@ -1,0 +1,561 @@
+{
+ "policy": "hover_ctbr_v3.nfpol.json",
+ "corner": "nominal",
+ "n": 128,
+ "results": {
+  "onboard": {
+   "RL@Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": 1.9584033489227295,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": 1.6897599697113037,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": 1.7217744588851929,
+     "unflyable": 0
+    }
+   },
+   "RL@Lite-cal": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.021573156118392944,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.029819171875715256,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.030734222382307053,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.984375,
+     "err_med_m": 0.03991301730275154,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.0263249259442091,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.04009339213371277,
+     "unflyable": 0
+    }
+   },
+   "RL@NF": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.033221036195755005,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.03544602543115616,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.9140625,
+     "err_med_m": 0.053130313754081726,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.875,
+     "err_med_m": 0.05338691920042038,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.03650382533669472,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.984375,
+     "err_med_m": 0.04041857644915581,
+     "unflyable": 0
+    }
+   },
+   "PID@Lite": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.016924358904361725,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.9765625,
+     "err_med_m": 0.02623640187084675,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.9921875,
+     "err_med_m": 0.02123890072107315,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.9921875,
+     "err_med_m": 0.035368602722883224,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.9765625,
+     "err_med_m": 0.024272700771689415,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.9453125,
+     "err_med_m": 0.0392158180475235,
+     "unflyable": 0
+    }
+   },
+   "Lite": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.013774541206657887,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.023306606337428093,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.020289625972509384,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.02866116724908352,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.9921875,
+     "err_med_m": 0.02786811627447605,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.9296875,
+     "err_med_m": 0.03674384951591492,
+     "unflyable": 0
+    }
+   }
+  },
+  "wifi_10": {
+   "RL@NF": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.0320616215467453,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.9140625,
+     "err_med_m": 0.04556834325194359,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.8046875,
+     "err_med_m": 0.06776001304388046,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.765625,
+     "err_med_m": 0.06430494785308838,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.96875,
+     "err_med_m": 0.0390874519944191,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.8828125,
+     "err_med_m": 0.057095713913440704,
+     "unflyable": 0
+    }
+   },
+   "PID@Lite": {
+    "hover_1m/nominal": {
+     "success": 0.96875,
+     "err_med_m": 0.016638891771435738,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.796875,
+     "err_med_m": 0.03188387677073479,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.021214697510004044,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.8203125,
+     "err_med_m": 0.039108291268348694,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.9609375,
+     "err_med_m": 0.026261596009135246,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.75,
+     "err_med_m": 0.04533261060714722,
+     "unflyable": 0
+    }
+   },
+   "Lite": {
+    "hover_1m/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.014029149897396564,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.023484596982598305,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.016994789242744446,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 1.0,
+     "err_med_m": 0.02764199487864971,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.9921875,
+     "err_med_m": 0.028774822130799294,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.9140625,
+     "err_med_m": 0.03671003505587578,
+     "unflyable": 0
+    }
+   }
+  },
+  "wifi_25": {
+   "RL@NF": {
+    "hover_1m/nominal": {
+     "success": 0.2578125,
+     "err_med_m": 0.14509233832359314,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0703125,
+     "err_med_m": 0.33527839183807373,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.1953125,
+     "err_med_m": 0.1636907458305359,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0625,
+     "err_med_m": 0.24740390479564667,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.1796875,
+     "err_med_m": 0.16078846156597137,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0625,
+     "err_med_m": 0.4023045301437378,
+     "unflyable": 0
+    }
+   },
+   "PID@Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0078125,
+     "err_med_m": 0.24970321357250214,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.03125,
+     "err_med_m": 0.31067487597465515,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0078125,
+     "err_med_m": 0.28308409452438354,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0859375,
+     "err_med_m": 0.3216645121574402,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0078125,
+     "err_med_m": 0.2568507194519043,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.03125,
+     "err_med_m": 0.40768757462501526,
+     "unflyable": 0
+    }
+   },
+   "Lite": {
+    "hover_1m/nominal": {
+     "success": 0.9921875,
+     "err_med_m": 0.016353655606508255,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.359375,
+     "err_med_m": 0.13790638744831085,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 1.0,
+     "err_med_m": 0.013145213946700096,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.3828125,
+     "err_med_m": 0.14950023591518402,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.9375,
+     "err_med_m": 0.030291331931948662,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.25,
+     "err_med_m": 0.2075752466917038,
+     "unflyable": 0
+    }
+   }
+  },
+  "wifi_50": {
+   "RL@NF": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   },
+   "PID@Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   },
+   "Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   }
+  },
+  "wifi_100": {
+   "RL@NF": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   },
+   "PID@Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   },
+   "Lite": {
+    "hover_1m/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "hover_1m/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "tilt_60/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/nominal": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    },
+    "throw/randomized": {
+     "success": 0.0,
+     "err_med_m": NaN,
+     "unflyable": 0
+    }
+   }
+  }
+ }
+}

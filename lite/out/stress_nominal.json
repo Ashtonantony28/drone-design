@@ -1,0 +1,76 @@
+{
+ "corner": "nominal",
+ "cases": {
+  "one_motor_85": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.616,
+   "max_saturated_frac": 0.009
+  },
+  "one_motor_tilt": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.611,
+   "max_saturated_frac": 0.007
+  },
+  "vibration_3x": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.593,
+   "max_saturated_frac": 0.003
+  },
+  "slow_motors": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 0.9921875,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.593,
+   "max_saturated_frac": 0.0
+  },
+  "heavy_15": {
+   "gated": true,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.682,
+   "max_saturated_frac": 0.003
+  },
+  "empty_battery": {
+   "gated": false,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.662,
+   "max_saturated_frac": 0.005
+  },
+  "combined": {
+   "gated": false,
+   "worst_success": {
+    "tilt_60": 1.0,
+    "throw": 1.0,
+    "upside_down": 1.0
+   },
+   "hover_throttle": 0.642,
+   "max_saturated_frac": 0.003
+  }
+ },
+ "failures": []
+}

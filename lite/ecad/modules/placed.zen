@@ -1,0 +1,47 @@
+"""One physical part whose reference designator follows the instance name.
+
+`pcb` allocates designators itself. It honours a refdes-like name only on a
+non-leaf segment of the instance path (pcb-sch `extract_hint_number`), so a bare
+`Component(name="U6")` inside a module is renumbered, while a component inside
+a module instance called `U6` keeps it. Parts are therefore instantiated through
+this wrapper with `place()` from parts.zen, which keeps the designators that the Lite BOM
+(lite/ecad/bom.csv) and MILLING.md use.
+
+Symbol pin i is `pin_names[i]`, connected to io `P<i>`, whose net type is
+`pin_kinds[i]`: p = Power, g = Ground, n = Net, x = NotConnected.
+"""
+
+# Defaults describe SW1 only so that the file evaluates on its own; every real
+# instance passes all of them.
+symbol = config(str, default="SW_SPDT", help="Symbol file under lite/ecad/lib/symbols, without extension")
+symbol_name = config(str, default="", help="Symbol name when the file holds more than one")
+footprint = config(
+    str, default="SW_SPDT_SS12D00_Mill", help="Footprint file under lite/ecad/lib/footprints, without extension"
+)
+prefix = config(str, default="U")
+mpn = config(str, default="")
+manufacturer = config(str, default="")
+value = config(str, default="")
+kind = config(str, default="", help="Component type, e.g. inductor")
+in_bom = config(bool, default=True)
+pin_names = config(str, default="A|COM|B", help="Symbol pin names, separated by '|'")
+pin_kinds = config(str, default="nnn", help="One of p/g/n/x per pin")
+
+_types = {"p": Power, "g": Ground, "n": Net, "x": NotConnected}
+_names = pin_names.split("|")
+check(len(_names) == len(pin_kinds), "pin_names and pin_kinds differ in length")
+_pins = {n: io("P" + str(i), _types[pin_kinds[i]]) for i, n in enumerate(_names)}
+
+Component(
+    name="X",
+    prefix=prefix,
+    symbol=Symbol(library="../lib/symbols/" + symbol + ".kicad_sym", name=symbol_name)
+    if symbol_name
+    else Symbol(library="../lib/symbols/" + symbol + ".kicad_sym"),
+    footprint=File("../lib/footprints/" + footprint + ".kicad_mod"),
+    part=Part(mpn=mpn, manufacturer=manufacturer) if mpn and manufacturer else None,
+    properties={"value": value} if value else {},
+    type=kind if kind else None,
+    pins=_pins,
+    skip_bom=not in_bom,
+)

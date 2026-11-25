@@ -120,7 +120,7 @@ def analyse(spec: dict | None = None, mass_kg: float | None = None, corner: str 
     usable_ah = el["capacity_mah"] / 1000.0 * el["usable_fraction"]
     out["hover_time_min"] = usable_ah / hov["battery_current_a"] * 60.0
     out["hover_rotor_hz"] = hov["omega"] / (2 * math.pi)
-    out["hover_blade_pass_hz"] = out["hover_rotor_hz"] * 3
+    out["hover_blade_pass_hz"] = out["hover_rotor_hz"] * spec["propeller"].get("blades", 3)   # v1 tri-blade default
     out["motor_tau_hover_s"] = pr.motor_tau(hov["omega"])
 
     # thrust curve fit T(w)/Tmax = A w^2 + (1-A) w with w = throttle (INTERFACES.md §2)

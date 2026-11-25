@@ -1,0 +1,19 @@
+(kicad_symbol_lib
+	(version 20251024)
+	(generator "lite_gen_lib")
+	(symbol "Motor"
+		(pin_names (offset 1.016))
+		(exclude_from_sim no) (in_bom yes) (on_board yes)
+		(property "Reference" "M" (at 0 5.08 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "Motor" (at 0 -5.08 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "Motor_0_1"
+			(rectangle (start -5.08 3.81) (end 5.08 -3.81) (stroke (width 0.254) (type default)) (fill (type background)))
+		)
+		(symbol "Motor_1_1"
+			(pin passive line (at -7.62 1.27 0) (length 2.54) (name "+" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -7.62 -1.27 0) (length 2.54) (name "-" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+		)
+	)
+)
