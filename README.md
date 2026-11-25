@@ -13,6 +13,26 @@ flight-tested in that project's simulator.
 
 ![iso render](out/cad/render_iso.png)
 
+## Gallery
+
+**NF-3D Lite** (`lite/`, the low-cost brushed micro build): the 222-part detailed model that `lite/audit.py`
+checks (0 overlaps, 0 floating parts), props turning in their real directions.
+
+![NF-3D Lite turntable](docs/media/lite-turntable.gif)
+
+| Flight board as assembled | Carbon NF-3D v1 |
+|:---:|:---:|
+| <img src="docs/media/lite-board.png" width="420" alt="Lite flight board: milled FR4, ESP32 MiniKit, GY-521"> | <img src="out/cad/render_iso.png" width="420" alt="NF-3D v1 carbon render"> |
+
+**Vision autonomy (simulation).** The AprilTag search, follow, approach and land behaviours flown closed-loop:
+neuroflight-fc simulator, synthetic OV2640 frames, the laptop's real detector and controller, 150 ms link latency.
+Nothing here has flown on hardware yet. Full 35 s clip with both episodes: [vision-replay.mp4](docs/media/vision-replay.mp4).
+
+![Simulated AprilTag search and follow](docs/media/vision-replay.gif)
+
+<sub>Regenerate: `xvfb-run -a python -m lite.turntable` (turntable, hero still, board still) and
+`python -m lite.vision_replay` (needs `../neuroflight-fc`, torch, opencv).</sub>
+
 ## The vehicle
 
 | | |
